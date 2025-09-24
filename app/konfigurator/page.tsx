@@ -7,7 +7,6 @@ type StyleOption = { id: string; label: string };
 type Horoscope = 'weekly' | 'birth' | 'partner' | 'quiz';
 type Length = 'short' | 'medium' | 'long';
 
-// Fonts (Google Fonts + Fallbacks)
 const FONTS: Record<string, string> = {
   inter: 'var(--font-inter)',
   playfair: 'var(--font-playfair)',
@@ -29,16 +28,12 @@ export default function KonfiguratorPage() {
   const [horoscope, setHoroscope] = useState<Horoscope>('weekly');
   const [length, setLength] = useState<Length>('medium');
   const [fontKey, setFontKey] = useState<keyof typeof FONTS>('inter');
-
   const [device, setDevice] = useState<keyof typeof DEVICES>('phone');
-  const [realSize, setRealSize] = useState(true);
-  const [zoom, setZoom] = useState(100);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [result, setResult] = useState<string>('');
 
-  // Stiloptionen laden
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -69,19 +64,20 @@ export default function KonfiguratorPage() {
       });
       const text = await res.text();
       try {
-        const js = JSON.parse(text);
-        setResult(js?.styled ?? String(text));
+        const js = JSON.parse(text) as unknown;
+        const rec = js as Record<string, unknown>;
+        setResult(typeof rec.styled === 'string' ? (rec.styled as string) : text);
       } catch {
         setResult(text);
       }
-    } catch (e: any) {
-      setErrorMsg(e?.message ?? 'Fehler beim Generieren');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Fehler beim Generieren';
+      setErrorMsg(msg);
     } finally {
       setLoading(false);
     }
   }
 
-  // Vorschau immer: Weißer Hintergrund, schwarze Typo
   const previewStyle = useMemo<React.CSSProperties>(() => ({
     fontFamily: FONTS[fontKey],
     color: '#000000',
@@ -94,7 +90,6 @@ export default function KonfiguratorPage() {
   }), [fontKey]);
 
   const frameMetrics = DEVICES[device];
-  const scaled = realSize ? 1 : zoom / 100;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-white to-gray-50 text-gray-900">
@@ -105,35 +100,34 @@ export default function KonfiguratorPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-[320px,1fr] gap-6">
-          {/* Sidebar */}
           <aside className="bg-white rounded-2xl shadow p-5 md:sticky md:top-4 h-fit">
             <h2 className="text-lg font-semibold mb-4">Einstellungen</h2>
 
             <div className="space-y-4">
-              {/* Creator */}
               <div>
                 <label className="block text-sm font-medium mb-1">Creator</label>
                 <select className="w-full rounded-lg border px-3 py-2"
-                        value={slug} onChange={(e) => { setSlug(e.target.value); setStyleId(''); }}>
+                        value={slug}
+                        onChange={(e) => { setSlug(e.target.value); setStyleId(''); }}>
                   <option value="lena">Lena</option>
                   <option value="paul">Paul</option>
                 </select>
               </div>
 
-              {/* Stil */}
               <div>
                 <label className="block text-sm font-medium mb-1">Stil</label>
                 <select className="w-full rounded-lg border px-3 py-2"
-                        value={styleId} onChange={(e) => setStyleId(e.target.value)}>
+                        value={styleId}
+                        onChange={(e) => setStyleId(e.target.value)}>
                   {styles.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
                 </select>
               </div>
 
-              {/* Horoskop-Art */}
               <div>
                 <label className="block text-sm font-medium mb-1">Horoskop-Art</label>
                 <select className="w-full rounded-lg border px-3 py-2"
-                        value={horoscope} onChange={(e) => setHoroscope(e.target.value as Horoscope)}>
+                        value={horoscope}
+                        onChange={(e) => setHoroscope(e.target.value as Horoscope)}>
                   <option value="weekly">Weekly</option>
                   <option value="birth">Birth</option>
                   <option value="partner">Partner</option>
@@ -141,27 +135,26 @@ export default function KonfiguratorPage() {
                 </select>
               </div>
 
-              {/* Textlänge */}
               <div>
                 <label className="block text-sm font-medium mb-1">Textlänge</label>
                 <select className="w-full rounded-lg border px-3 py-2"
-                        value={length} onChange={(e) => setLength(e.target.value as Length)}>
+                        value={length}
+                        onChange={(e) => setLength(e.target.value as Length)}>
                   <option value="short">Kurz</option>
                   <option value="medium">Mittel</option>
                   <option value="long">Lang</option>
                 </select>
               </div>
 
-              {/* Typografie */}
               <div>
                 <label className="block text-sm font-medium mb-1">Typografie</label>
                 <select className="w-full rounded-lg border px-3 py-2"
-                        value={fontKey} onChange={(e) => setFontKey(e.target.value as keyof typeof FONTS)}>
+                        value={fontKey}
+                        onChange={(e) => setFontKey(e.target.value as keyof typeof FONTS)}>
                   {Object.keys(FONTS).map(k => <option key={k} value={k}>{k}</option>)}
                 </select>
               </div>
 
-              {/* Actions */}
               <div className="pt-2 flex gap-3">
                 <button onClick={handleGenerate} disabled={loading || !styleId}
                         className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50">
@@ -175,38 +168,24 @@ export default function KonfiguratorPage() {
             </div>
           </aside>
 
-          {/* Preview */}
           <section className="bg-white rounded-2xl shadow p-5">
             <div className="flex flex-wrap items-center gap-3 mb-4">
               <div className="flex items-center gap-2">
                 <label className="text-sm font-medium">Device</label>
                 <select className="rounded-lg border px-3 py-1.5"
-                        value={device} onChange={(e) => setDevice(e.target.value as keyof typeof DEVICES)}>
-                  {Object.entries(DEVICES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                        value={device}
+                        onChange={(e) => setDevice(e.target.value as keyof typeof DEVICES)}>
+                  {Object.entries(DEVICES).map(([k, v]) => (
+                    <option key={k} value={k}>{v.label}</option>
+                  ))}
                 </select>
               </div>
-
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={realSize} onChange={(e) => setRealSize(e.target.checked)} />
-                Realgröße
-              </label>
-
-              {!realSize && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">Zoom</span>
-                  <input type="range" min={50} max={150} step={5}
-                         value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />
-                  <span className="text-sm w-10 text-right">{zoom}%</span>
-                </div>
-              )}
             </div>
 
             <div className="w-full overflow-auto grid place-items-center py-6">
               <div style={{
                 width: frameMetrics.w,
                 height: frameMetrics.h,
-                transform: `scale(${scaled})`,
-                transformOrigin: 'top center',
                 borderRadius: 24,
                 boxShadow: '0 12px 30px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
                 background: '#f8fafc',
