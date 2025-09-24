@@ -1,42 +1,79 @@
 // app/api/proxy/route.ts
-import type { NextRequest } from 'next/server';
+import { NextResponse } from "next/server";
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-// Optional: Edge ist super schnell; bei Bedarf kannst du auf 'nodejs' wechseln
-export const runtime = 'edge';
+function extFromPath(pathname: string) {
+  const m = pathname.toLowerCase().match(/\.([a-z0-9]+)$/);
+  return m ? m[1] : "";
+}
 
-export async function GET(req: NextRequest) {
-  const target = req.nextUrl.searchParams.get('url');
-  if (!target) return new Response('Missing url', { status: 400 });
+const ctMap: Record<string, string> = {
+  pdf:  "application/pdf",
+  css:  "text/css; charset=utf-8",
+  html: "text/html; charset=utf-8",
+  js:   "application/javascript; charset=utf-8",
+  json: "application/json; charset=utf-8",
+  svg:  "image/svg+xml",
+  png:  "image/png",
+  jpg:  "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+};
 
-  // Range weiterreichen (wichtig für PDFs/Streaming)
-  const range = req.headers.get('range') ?? undefined;
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const u = url.searchParams.get("u");
+  const download = url.searchParams.get("download") === "1";
 
-  const upstream = await fetch(target, {
-    headers: range ? { Range: range } : {},
-    // bei Bedarf: cache: 'no-store'
+  if (!u) return NextResponse.json({ error: "missing u" }, { status: 400 });
+
+  let target: URL;
+  try {
+    target = new URL(u);
+  } catch {
+    return NextResponse.json({ error: "invalid url" }, { status: 400 });
+  }
+
+  // ✅ Whitelist – nur eure Supabase-Domain + public-Pfad
+  const allowedHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).host;
+  if (target.host !== allowedHost)
+    return NextResponse.json({ error: "host not allowed" }, { status: 403 });
+  if (!target.pathname.startsWith("/storage/v1/object/public/"))
+    return NextResponse.json({ error: "path not allowed" }, { status: 403 });
+
+  const upstream = await fetch(target.toString(), {
+    cache: "no-store", // Dev: kein Cache-Flicker
+    headers: { "user-agent": "luzid-view-proxy" },
   });
-
-  // Content-Type erzwingen basierend auf Dateiendung
-  const ext = new URL(target).pathname.split('.').pop()?.toLowerCase();
-  const forced =
-    ext === 'html'
-      ? 'text/html; charset=utf-8'
-      : ext === 'pdf'
-      ? 'application/pdf'
-      : upstream.headers.get('content-type') ?? 'application/octet-stream';
 
   const headers = new Headers(upstream.headers);
-  headers.set('content-type', forced);
-  // sinnvolle Defaults
-  headers.set('cache-control', 'no-store');
-  headers.delete('content-encoding'); // beugt Doppelkodierung vor, falls vorhanden
+  const ext = extFromPath(target.pathname);
+  const forced = ctMap[ext];
+  if (forced) headers.set("content-type", forced);
 
-  return new Response(upstream.body, {
+  // ✅ iFrame-kompatibel: restriktive Upstream-Header entfernen
+  headers.delete("content-security-policy");
+  headers.delete("x-frame-options");
+
+  if (ext === "pdf") {
+    const filename = target.pathname.split("/").pop() || "file.pdf";
+    headers.set(
+      "content-disposition",
+      `${download ? "attachment" : "inline"}; filename="${filename}"`
+    );
+  }
+
+  headers.set(
+    "cache-control",
+    process.env.NODE_ENV === "production" ? "public, max-age=60" : "no-store"
+  );
+
+  return new NextResponse(upstream.body, {
     status: upstream.status,
-    statusText: upstream.statusText,
     headers,
   });
+}
+
+export async function HEAD(req: Request) {
+  return GET(req);
 }
 

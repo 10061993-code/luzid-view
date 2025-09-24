@@ -1,14 +1,22 @@
+import { headers } from "next/headers";
+
 export const dynamic = "force-dynamic";
 
+function getBaseUrl() {
+  const h = headers();
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const host = h.get("host") ?? "localhost:3000";
+  return `${proto}://${host}`;
+}
+
 async function getData() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/style-options/lena`, {
-    cache: "no-store",
-  });
+  const base = getBaseUrl();
+  const res = await fetch(`${base}/api/style-options/lena`, { cache: "no-store" });
   const text = await res.text();
   try {
-    return { ok: res.ok, json: JSON.parse(text) };
+    return { ok: res.ok, json: JSON.parse(text) as unknown };
   } catch {
-    return { ok: res.ok, json: { error: true, raw: text } };
+    return { ok: res.ok, json: { error: true, raw: text } as unknown };
   }
 }
 
@@ -25,5 +33,4 @@ export default async function BeispielPage() {
     </main>
   );
 }
-
 
