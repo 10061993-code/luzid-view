@@ -11,7 +11,7 @@ export default function Home() {
         </p>
         <div className="mt-6 flex gap-4 justify-center">
           <Link
-            href="/api/style-options/lena"
+            href="/beispiel"
             className="px-6 py-3 rounded-xl bg-indigo-600 text-white font-semibold shadow hover:bg-indigo-700"
           >
             Beispiel ansehen
