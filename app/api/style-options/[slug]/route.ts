@@ -6,8 +6,13 @@ const backend = process.env.BACKEND_URL || "http://localhost:8787";
 
 export async function GET(req: Request) {
   try {
-    const slug = decodeURIComponent(new URL(req.url).pathname.split("/").pop() || "");
-    if (!slug) return NextResponse.json({ error: true, message: "Missing slug" }, { status: 400 });
+    const url = new URL(req.url);
+    // Hol dir den Slug robust aus dem Pfad
+    const parts = url.pathname.split("/");
+    const slug = parts[parts.length - 1] || "";
+    if (!slug) {
+      return NextResponse.json({ error: true, message: "Missing slug" }, { status: 400 });
+    }
 
     const res = await fetch(`${backend}/style-options/${encodeURIComponent(slug)}`, {
       cache: "no-store",
@@ -16,8 +21,7 @@ export async function GET(req: Request) {
 
     const text = await res.text();
     try {
-      const data: unknown = JSON.parse(text);
-      return NextResponse.json(data, { status: res.status });
+      return NextResponse.json(JSON.parse(text), { status: res.status });
     } catch {
       return new NextResponse(text, {
         status: res.status,
