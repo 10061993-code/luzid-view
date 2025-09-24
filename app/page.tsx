@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-indigo-100 via-white to-pink-50 text-gray-900">
@@ -7,19 +9,19 @@ export default function Home() {
           Dein persönliches astrologisches Briefing – automatisch generiert und
           im Stil deines Lieblings-Creators.
         </p>
-        <div className="mt-6 space-x-4">
-          <a
+        <div className="mt-6 flex gap-4 justify-center">
+          <Link
             href="/api/style-options/lena"
             className="px-6 py-3 rounded-xl bg-indigo-600 text-white font-semibold shadow hover:bg-indigo-700"
           >
             Beispiel ansehen
-          </a>
-          <a
+          </Link>
+          <Link
             href="/admin"
             className="px-6 py-3 rounded-xl bg-gray-100 font-semibold hover:bg-gray-200"
           >
             Admin
-          </a>
+          </Link>
         </div>
       </div>
     </main>
