@@ -5,15 +5,15 @@ const backend = process.env.BACKEND_URL || "http://localhost:8787";
 
 export async function POST(
   req: Request,
-  ctx: { params: { slug: string } }
+  { params }: { params: Record<string, string> } // <- kompatibel mit Next 15
 ) {
-  const { slug } = ctx.params;
+  const slug = params.slug;
   try {
     let payload: unknown = {};
     try {
       payload = await req.json();
     } catch {
-      // leeres Payload bleibt {}
+      // leer lassen
     }
 
     const res = await fetch(`${backend}/style/${encodeURIComponent(slug)}`, {

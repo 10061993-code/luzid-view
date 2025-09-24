@@ -5,9 +5,9 @@ const backend = process.env.BACKEND_URL || "http://localhost:8787";
 
 export async function GET(
   _req: Request,
-  ctx: { params: { slug: string } }
+  { params }: { params: Record<string, string> } // <- kompatibel mit Next 15
 ) {
-  const { slug } = ctx.params;
+  const slug = params.slug;
   try {
     const res = await fetch(`${backend}/style-options/${encodeURIComponent(slug)}`, {
       cache: "no-store",
@@ -15,7 +15,6 @@ export async function GET(
     });
     const text = await res.text();
 
-    // Wenn JSON → als JSON weitergeben, sonst Rohtext/HTML durchreichen
     try {
       const data: unknown = JSON.parse(text);
       return NextResponse.json(data, { status: res.status });
