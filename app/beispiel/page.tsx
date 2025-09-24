@@ -1,18 +1,10 @@
-import { headers } from "next/headers";
-
 export const dynamic = "force-dynamic";
 
-async function getBaseUrl() {
-  const h = await headers(); // <- in Next 15 Promise<ReadonlyHeaders>
-  const proto = h.get("x-forwarded-proto") ?? "https";
-  const host = h.get("host") ?? "localhost:3000";
-  return `${proto}://${host}`;
-}
-
 async function getData() {
-  const base = await getBaseUrl();
+  const base = process.env.NEXT_PUBLIC_SITE_URL!;
   const res = await fetch(`${base}/api/style-options/lena`, { cache: "no-store" });
   const text = await res.text();
+
   try {
     return { ok: res.ok, json: JSON.parse(text) as unknown };
   } catch {
