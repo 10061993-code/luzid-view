@@ -9,13 +9,22 @@ export default function Home() {
           Dein persönliches astrologisches Briefing – automatisch generiert und
           im Stil deines Lieblings-Creators.
         </p>
-        <div className="mt-6 flex gap-4 justify-center">
+
+        <div className="mt-6 flex gap-4 flex-wrap justify-center">
           <Link
             href="/beispiel"
             className="px-6 py-3 rounded-xl bg-indigo-600 text-white font-semibold shadow hover:bg-indigo-700"
           >
             Beispiel ansehen
           </Link>
+
+          <Link
+            href="/generieren"
+            className="px-6 py-3 rounded-xl bg-pink-600 text-white font-semibold shadow hover:bg-pink-700"
+          >
+            Horoskop generieren
+          </Link>
+
           <Link
             href="/admin"
             className="px-6 py-3 rounded-xl bg-gray-100 font-semibold hover:bg-gray-200"
