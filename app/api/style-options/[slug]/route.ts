@@ -1,20 +1,20 @@
 // app/api/style-options/[slug]/route.ts
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
 const backend = process.env.BACKEND_URL || "http://localhost:8787";
 
-export async function GET(
-  _req: Request,
-  { params }: { params: Record<string, string> } // <- kompatibel mit Next 15
-) {
-  const slug = params.slug;
+export async function GET(req: Request) {
   try {
+    const slug = decodeURIComponent(new URL(req.url).pathname.split("/").pop() || "");
+    if (!slug) return NextResponse.json({ error: true, message: "Missing slug" }, { status: 400 });
+
     const res = await fetch(`${backend}/style-options/${encodeURIComponent(slug)}`, {
       cache: "no-store",
       headers: { Accept: "application/json" },
     });
-    const text = await res.text();
 
+    const text = await res.text();
     try {
       const data: unknown = JSON.parse(text);
       return NextResponse.json(data, { status: res.status });
