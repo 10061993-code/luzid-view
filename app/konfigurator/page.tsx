@@ -4,6 +4,10 @@ import { useMemo, useState } from "react";
 import LeadCTAForm from "@/components/LeadCTAForm";
 
 type Device = "phone" | "tablet" | "desktop";
+type HoroscopeType = "birth" | "weekly" | "partner" | "quiz";
+type ToneStyle = "neutral" | "warm" | "direct" | "poetic";
+type TextLength = "short" | "medium" | "long";
+type FontOption = "Inter" | "Playfair" | "Helvetica Neue" | "System";
 
 const BRANDING_ENABLED = process.env.NEXT_PUBLIC_BRANDING_ENABLED === "true";
 const DEFAULT_TEXT =
@@ -12,12 +16,12 @@ const DEFAULT_TEXT =
 
 export default function KonfiguratorPage() {
   // Formular-State
-  const [type, setType] = useState<"birth" | "weekly" | "partner" | "quiz">("weekly");
-  const [style, setStyle] = useState<"neutral" | "warm" | "direct" | "poetic">("neutral");
-  const [length, setLength] = useState<"short" | "medium" | "long">("medium");
+  const [type, setType] = useState<HoroscopeType>("weekly");
+  const [style, setStyle] = useState<ToneStyle>("neutral");
+  const [length, setLength] = useState<TextLength>("medium");
 
-  // Branding (nur Vorschau; echte Freischaltung später hinter Login)
-  const [font, setFont] = useState<"Inter" | "Playfair" | "Helvetica Neue" | "System">("Inter");
+  // Branding (Vorschau)
+  const [font, setFont] = useState<FontOption>("Inter");
 
   // Preview-State
   const [device, setDevice] = useState<Device>("phone");
@@ -25,15 +29,15 @@ export default function KonfiguratorPage() {
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<string>(DEFAULT_TEXT);
 
-  // API-Ziel: Entweder öffentlich konfigurierbar (NEXT_PUBLIC_GENERATE_URL) oder Fallback
-  const API_URL = process.env.NEXT_PUBLIC_GENERATE_URL || "";
+  // API-Ziel
+  const API_URL: string = process.env.NEXT_PUBLIC_GENERATE_URL ?? "";
 
-  const deviceWidth = useMemo(() => {
+  const deviceWidth = useMemo<number>(() => {
     switch (device) {
       case "phone":
-        return 390; // iPhone 15 Breite ~390px
+        return 390;
       case "tablet":
-        return 744; // iPad Mini
+        return 744;
       case "desktop":
         return 1024;
       default:
@@ -41,7 +45,7 @@ export default function KonfiguratorPage() {
     }
   }, [device]);
 
-  const fontFamily = useMemo(() => {
+  const fontFamily = useMemo<string>(() => {
     switch (font) {
       case "Inter":
         return `'Inter', system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji'`;
@@ -55,14 +59,13 @@ export default function KonfiguratorPage() {
     }
   }, [font]);
 
-  async function handleGenerate(e: React.FormEvent) {
+  async function handleGenerate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErr(null);
     setLoading(true);
 
     try {
       if (API_URL) {
-        // Einfache GET-Variante (du kannst auch POST verwenden)
         const url = new URL(API_URL);
         url.searchParams.set("type", type);
         url.searchParams.set("style", style);
@@ -73,25 +76,28 @@ export default function KonfiguratorPage() {
           throw new Error(`API ${res.status}`);
         }
 
-        // Versuche zuerst JSON zu lesen, falle auf Text zurück
-        const contentType = res.headers.get("content-type") || "";
+        const contentType = res.headers.get("content-type") ?? "";
         if (contentType.includes("application/json")) {
-          const data = await res.json();
-          const text = data.text || data.result || data.output || "";
-          setResult(text || DEFAULT_TEXT);
+          const data = (await res.json()) as unknown;
+          const text =
+            (data as Record<string, unknown>)["text"] ??
+            (data as Record<string, unknown>)["result"] ??
+            (data as Record<string, unknown>)["output"] ??
+            "";
+          setResult(typeof text === "string" && text ? text : DEFAULT_TEXT);
         } else {
           const text = await res.text();
           setResult(text || DEFAULT_TEXT);
         }
       } else {
-        // Fallback: Demo-Text lokal
         const demo = `Demo-Vorschau (${type}, ${style}, ${length}): 
 Heute öffnet sich ein klares Fenster für Fokus und kleine Neuanfänge. 
 Nutze die nächsten Stunden, um etwas Konkretes anzustoßen – weniger Grübeln, mehr Tun.`;
         setResult(demo);
       }
-    } catch (e: any) {
-      setErr(e?.message || "Fehler beim Generieren.");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Fehler beim Generieren.";
+      setErr(msg);
       setResult(DEFAULT_TEXT);
     } finally {
       setLoading(false);
@@ -115,7 +121,9 @@ Nutze die nächsten Stunden, um etwas Konkretes anzustoßen – weniger Grübeln
             <select
               className="rounded-lg border px-3 py-2"
               value={type}
-              onChange={(e) => setType(e.target.value as any)}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                setType(e.target.value as HoroscopeType)
+              }
             >
               <option value="weekly">Wöchentlich (Transit)</option>
               <option value="birth">Geburtshoroskop</option>
@@ -129,7 +137,9 @@ Nutze die nächsten Stunden, um etwas Konkretes anzustoßen – weniger Grübeln
             <select
               className="rounded-lg border px-3 py-2"
               value={style}
-              onChange={(e) => setStyle(e.target.value as any)}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                setStyle(e.target.value as ToneStyle)
+              }
             >
               <option value="neutral">Neutral/ausgewogen</option>
               <option value="warm">Warm & konkret</option>
@@ -143,7 +153,9 @@ Nutze die nächsten Stunden, um etwas Konkretes anzustoßen – weniger Grübeln
             <select
               className="rounded-lg border px-3 py-2"
               value={length}
-              onChange={(e) => setLength(e.target.value as any)}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                setLength(e.target.value as TextLength)
+              }
             >
               <option value="short">Kurz (~120–180 Wörter)</option>
               <option value="medium">Mittel (~250–400 Wörter)</option>
@@ -151,7 +163,7 @@ Nutze die nächsten Stunden, um etwas Konkretes anzustoßen – weniger Grübeln
             </select>
           </div>
 
-          {/* Branding-Preview (immer erlaubt als Vorschau; echte Freischaltung später hinter Login) */}
+          {/* Branding-Preview */}
           <div className="grid gap-1">
             <label className="text-sm font-medium">
               Typografie {BRANDING_ENABLED ? "" : <span className="text-xs text-gray-500">(Vorschau)</span>}
@@ -159,7 +171,9 @@ Nutze die nächsten Stunden, um etwas Konkretes anzustoßen – weniger Grübeln
             <select
               className="rounded-lg border px-3 py-2"
               value={font}
-              onChange={(e) => setFont(e.target.value as any)}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                setFont(e.target.value as FontOption)
+              }
             >
               <option value="Inter">Inter</option>
               <option value="Playfair">Playfair</option>
