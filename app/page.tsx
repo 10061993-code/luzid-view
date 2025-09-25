@@ -2,20 +2,20 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-indigo-100 via-white to-pink-50 text-gray-900">
-      <div className="text-center space-y-4">
+    <main className="flex flex-col items-center justify-center min-h-screen bg-white text-black">
+      <div className="text-center space-y-5">
         <h1 className="text-4xl font-bold">✨ LUZID Preview</h1>
-        <p className="text-lg text-gray-600 max-w-md mx-auto">
+        <p className="text-lg text-gray-700 max-w-md mx-auto">
           Dein persönliches astrologisches Briefing – automatisch generiert und
           im Stil deines Lieblings-Creators.
         </p>
 
-        <div className="mt-6 flex gap-4 flex-wrap justify-center">
+        <div className="mt-6 flex flex-wrap gap-4 justify-center">
           <Link
-            href="/beispiel"
+            href="/konfigurator"
             className="px-6 py-3 rounded-xl bg-indigo-600 text-white font-semibold shadow hover:bg-indigo-700"
           >
-            Beispiel ansehen
+            Konfigurator öffnen
           </Link>
 
           <Link
@@ -23,6 +23,13 @@ export default function Home() {
             className="px-6 py-3 rounded-xl bg-pink-600 text-white font-semibold shadow hover:bg-pink-700"
           >
             Horoskop generieren
+          </Link>
+
+          <Link
+            href="/beispiel"
+            className="px-6 py-3 rounded-xl bg-gray-100 font-semibold hover:bg-gray-200"
+          >
+            Style-Options (JSON)
           </Link>
 
           <Link
