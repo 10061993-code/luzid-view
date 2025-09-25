@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 
 type LeadPayload = {
@@ -25,26 +25,18 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
   });
   const [submitting, setSubmitting] = useState(false);
   const [ok, setOk] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [serverErr, setServerErr] = useState<string | null>(null);
 
-  const bookingUrl = process.env.NEXT_PUBLIC_BOOKING_URL || "/kontakt";
+  // Button erst aktivieren, wenn alles passt
+  const isValid = useMemo(() => {
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
+    return form.name.trim().length > 1 && emailOk && form.consent;
+  }, [form.name, form.email, form.consent]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setErr(null);
-
-    if (!form.name.trim()) {
-      setErr("Bitte deinen Namen angeben.");
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      setErr("Bitte eine gültige E-Mail eingeben.");
-      return;
-    }
-    if (!form.consent) {
-      setErr("Bitte Einwilligung zur Kontaktaufnahme bestätigen.");
-      return;
-    }
+    setServerErr(null);
+    if (!isValid) return; // keine Fehltexte, nur Button disabled halten
 
     setSubmitting(true);
     try {
@@ -54,13 +46,13 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
         body: JSON.stringify(form),
       });
       if (!res.ok) {
-        const t = await res.text();
-        throw new Error(t || "Fehler beim Absenden.");
+        // technische Fehler nur dezent anzeigen
+        setServerErr("Das hat leider nicht geklappt. Bitte später erneut versuchen.");
+        return;
       }
       setOk(true);
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Unerwarteter Fehler.";
-      setErr(msg);
+    } catch {
+      setServerErr("Das hat leider nicht geklappt. Bitte später erneut versuchen.");
     } finally {
       setSubmitting(false);
     }
@@ -71,12 +63,8 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
       <section className={`mt-8 rounded-2xl border bg-white text-black shadow-sm p-6 ${className}`}>
         <h2 className="text-2xl font-bold">Danke! 🎉</h2>
         <p className="mt-2 text-gray-700">
-          Wir melden uns kurz für die Demo-Terminierung. Wenn du möchtest, kannst du auch{" "}
-          <Link href={bookingUrl} target="_blank" className="underline">
-            hier sofort einen Termin buchen
-          </Link>.
+          Wir melden uns kurz zur Terminierung und stimmen deinen Style ab.
         </p>
-        <p className="mt-3 text-xs text-gray-500">Du bekommst zusätzlich eine Bestätigung per E-Mail.</p>
       </section>
     );
   }
@@ -90,7 +78,7 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
 
       <form onSubmit={onSubmit} className="mt-4 grid gap-3" noValidate>
         {/* Honeypot */}
-        <div className="hidden">
+        <div className="hidden" aria-hidden="true">
           <label htmlFor="website">Website</label>
           <input
             id="website"
@@ -166,7 +154,7 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
           />
         </div>
 
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-start gap-2 text-sm">
           <input
             type="checkbox"
             checked={form.consent}
@@ -180,23 +168,18 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
           </span>
         </label>
 
-        {err && <p className="text-sm text-red-600">{err}</p>}
+        {/* nur bei echten Serverfehlern kurz anzeigen */}
+        {serverErr && <p className="text-sm text-red-600">{serverErr}</p>}
 
-        <div className="flex flex-wrap gap-3">
+        <div className="flex">
           <button
             type="submit"
-            disabled={submitting}
+            disabled={!isValid || submitting}
+            aria-disabled={!isValid || submitting}
             className="px-5 py-3 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-60"
           >
             {submitting ? "Senden…" : "Demo anfragen"}
           </button>
-          <Link
-            href={bookingUrl}
-            target="_blank"
-            className="px-5 py-3 rounded-xl bg-gray-100 font-semibold hover:bg-gray-200"
-          >
-            Direkt Termin buchen
-          </Link>
         </div>
 
         <p className="mt-2 text-xs text-gray-500">15–20 Min. • Kostenlos • Dein Branding live im Tool</p>
