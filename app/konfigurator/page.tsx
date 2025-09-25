@@ -1,242 +1,243 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useMemo, useState } from "react";
+import LeadCTAForm from "@/components/LeadCTAForm";
 
-type StyleOption = { id: string; label: string };
-type Horoscope = 'weekly' | 'birth' | 'partner' | 'quiz';
-type Length = 'short' | 'medium' | 'long';
+type Device = "phone" | "tablet" | "desktop";
 
-const FONTS: Record<string, string> = {
-  inter: 'var(--font-inter)',
-  playfair: 'var(--font-playfair)',
-  helvetica: '"Helvetica Neue", Helvetica, Arial, sans-serif',
-  system: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
-  serif: 'Georgia, Cambria, "Times New Roman", serif',
-};
-
-const DEVICES = {
-  phone: { label: 'Phone (390×844)', w: 390, h: 844 },
-  tablet: { label: 'Tablet (768×1024)', w: 768, h: 1024 },
-  desktop: { label: 'Desktop (1024×700)', w: 1024, h: 700 },
-} as const;
+const BRANDING_ENABLED = process.env.NEXT_PUBLIC_BRANDING_ENABLED === "true";
+const DEFAULT_TEXT =
+  "Klicke auf „Text generieren“, um eine Vorschau deines Horoskop-Textes zu erhalten. " +
+  "Im Demo-Modus sind Speichern & Export deaktiviert. Für deinen eigenen Style (Logo, Farben, Typo) – einfach unten Demo anfragen.";
 
 export default function KonfiguratorPage() {
-  // Creator ist fix gesetzt
-  const slug = 'lena';
-
   // Formular-State
-  const [styles, setStyles] = useState<StyleOption[]>([]);
-  const [styleId, setStyleId] = useState<string>('');
-  const [horoscope, setHoroscope] = useState<Horoscope>('weekly');
-  const [length, setLength] = useState<Length>('medium');
-  const [fontKey, setFontKey] = useState<keyof typeof FONTS>('inter');
+  const [type, setType] = useState<"birth" | "weekly" | "partner" | "quiz">("weekly");
+  const [style, setStyle] = useState<"neutral" | "warm" | "direct" | "poetic">("neutral");
+  const [length, setLength] = useState<"short" | "medium" | "long">("medium");
 
-  // Preview-Steuerung
-  const [device, setDevice] = useState<keyof typeof DEVICES>('phone');
+  // Branding (nur Vorschau; echte Freischaltung später hinter Login)
+  const [font, setFont] = useState<"Inter" | "Playfair" | "Helvetica Neue" | "System">("Inter");
 
-  // Ergebnis / Status
+  // Preview-State
+  const [device, setDevice] = useState<Device>("phone");
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [result, setResult] = useState<string>('');
+  const [err, setErr] = useState<string | null>(null);
+  const [result, setResult] = useState<string>(DEFAULT_TEXT);
 
-  // Stiloptionen laden
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await fetch(`/api/style-options/${slug}`, { cache: 'no-store' });
-        const js = await res.json();
-        if (!alive) return;
-        const opts: StyleOption[] = js?.styles ?? [];
-        setStyles(opts);
-        if (!styleId && opts[0]) setStyleId(opts[0].id);
-      } catch {
-        setErrorMsg('Konnte Stil-Optionen nicht laden.');
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [slug, styleId]);
+  // API-Ziel: Entweder öffentlich konfigurierbar (NEXT_PUBLIC_GENERATE_URL) oder Fallback
+  const API_URL = process.env.NEXT_PUBLIC_GENERATE_URL || "";
 
-  async function handleGenerate() {
+  const deviceWidth = useMemo(() => {
+    switch (device) {
+      case "phone":
+        return 390; // iPhone 15 Breite ~390px
+      case "tablet":
+        return 744; // iPad Mini
+      case "desktop":
+        return 1024;
+      default:
+        return 390;
+    }
+  }, [device]);
+
+  const fontFamily = useMemo(() => {
+    switch (font) {
+      case "Inter":
+        return `'Inter', system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji'`;
+      case "Playfair":
+        return `'Playfair Display', Georgia, Cambria, 'Times New Roman', Times, serif`;
+      case "Helvetica Neue":
+        return `'Helvetica Neue', Helvetica, Arial, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans'`;
+      case "System":
+      default:
+        return `system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial`;
+    }
+  }, [font]);
+
+  async function handleGenerate(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
     setLoading(true);
-    setErrorMsg(null);
-    setResult('');
+
     try {
-      const res = await fetch(`/api/style/${slug}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify({ style_id: styleId, horoscope, length }),
-      });
-      const text = await res.text();
-      try {
-        const js = JSON.parse(text) as unknown;
-        const rec = js as Record<string, unknown>;
-        setResult(typeof rec.styled === 'string' ? (rec.styled as string) : text);
-      } catch {
-        setResult(text);
+      if (API_URL) {
+        // Einfache GET-Variante (du kannst auch POST verwenden)
+        const url = new URL(API_URL);
+        url.searchParams.set("type", type);
+        url.searchParams.set("style", style);
+        url.searchParams.set("length", length);
+
+        const res = await fetch(url.toString(), { method: "GET" });
+        if (!res.ok) {
+          throw new Error(`API ${res.status}`);
+        }
+
+        // Versuche zuerst JSON zu lesen, falle auf Text zurück
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const data = await res.json();
+          const text = data.text || data.result || data.output || "";
+          setResult(text || DEFAULT_TEXT);
+        } else {
+          const text = await res.text();
+          setResult(text || DEFAULT_TEXT);
+        }
+      } else {
+        // Fallback: Demo-Text lokal
+        const demo = `Demo-Vorschau (${type}, ${style}, ${length}): 
+Heute öffnet sich ein klares Fenster für Fokus und kleine Neuanfänge. 
+Nutze die nächsten Stunden, um etwas Konkretes anzustoßen – weniger Grübeln, mehr Tun.`;
+        setResult(demo);
       }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Fehler beim Generieren';
-      setErrorMsg(msg);
+    } catch (e: any) {
+      setErr(e?.message || "Fehler beim Generieren.");
+      setResult(DEFAULT_TEXT);
     } finally {
       setLoading(false);
     }
   }
 
-  // Preview-Styling
-  const previewStyle = useMemo<React.CSSProperties>(() => ({
-    fontFamily: FONTS[fontKey],
-    color: '#000000',
-    backgroundColor: '#FFFFFF',
-    lineHeight: 1.7,
-    padding: '20px',
-    borderRadius: '16px',
-    whiteSpace: 'pre-line',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
-  }), [fontKey]);
-
-  const frameMetrics = DEVICES[device];
-
   return (
-    <main className="min-h-screen bg-gradient-to-b from-white to-gray-50 text-gray-900">
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold">🎛️ LUZID – Konfigurator</h1>
-          <Link href="/" className="text-sm text-indigo-600 hover:underline">
-            Zur Startseite
-          </Link>
-        </div>
+    <main className="mx-auto max-w-5xl px-4 py-8 text-black">
+      <header className="mb-6">
+        <h1 className="text-3xl font-bold">Konfigurator</h1>
+        <p className="text-gray-700">
+          Öffentliche Demo. Wähle Art, Stil und Länge und generiere eine Vorschau.
+        </p>
+      </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-[320px,1fr] gap-6">
-          {/* Sidebar */}
-          <aside className="bg-white rounded-2xl shadow p-5 md:sticky md:top-4 h-fit">
-            <h2 className="text-lg font-semibold mb-4">Einstellungen</h2>
+      <section className="grid gap-6 md:grid-cols-2">
+        {/* Linke Spalte: Formular */}
+        <form onSubmit={handleGenerate} className="rounded-2xl border bg-white p-5 shadow-sm space-y-4">
+          <div className="grid gap-1">
+            <label className="text-sm font-medium">Horoskop-Art</label>
+            <select
+              className="rounded-lg border px-3 py-2"
+              value={type}
+              onChange={(e) => setType(e.target.value as any)}
+            >
+              <option value="weekly">Wöchentlich (Transit)</option>
+              <option value="birth">Geburtshoroskop</option>
+              <option value="partner">Partner (Synastrie)</option>
+              <option value="quiz">Quiz/Antwort-Interpretation</option>
+            </select>
+          </div>
 
-            <div className="space-y-4">
-              {/* Stil */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Stil</label>
-                <select
-                  className="w-full rounded-lg border px-3 py-2"
-                  value={styleId}
-                  onChange={(e) => setStyleId(e.target.value)}
-                >
-                  {styles.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          <div className="grid gap-1">
+            <label className="text-sm font-medium">Stil (Tonalität)</label>
+            <select
+              className="rounded-lg border px-3 py-2"
+              value={style}
+              onChange={(e) => setStyle(e.target.value as any)}
+            >
+              <option value="neutral">Neutral/ausgewogen</option>
+              <option value="warm">Warm & konkret</option>
+              <option value="direct">Direkt & prägnant</option>
+              <option value="poetic">Poetisch</option>
+            </select>
+          </div>
 
-              {/* Horoskop-Art */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Horoskop-Art</label>
-                <select
-                  className="w-full rounded-lg border px-3 py-2"
-                  value={horoscope}
-                  onChange={(e) => setHoroscope(e.target.value as Horoscope)}
-                >
-                  <option value="weekly">Weekly</option>
-                  <option value="birth">Birth</option>
-                  <option value="partner">Partner</option>
-                  <option value="quiz">Quiz</option>
-                </select>
-              </div>
+          <div className="grid gap-1">
+            <label className="text-sm font-medium">Textlänge</label>
+            <select
+              className="rounded-lg border px-3 py-2"
+              value={length}
+              onChange={(e) => setLength(e.target.value as any)}
+            >
+              <option value="short">Kurz (~120–180 Wörter)</option>
+              <option value="medium">Mittel (~250–400 Wörter)</option>
+              <option value="long">Lang (~500–700 Wörter)</option>
+            </select>
+          </div>
 
-              {/* Textlänge */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Textlänge</label>
-                <select
-                  className="w-full rounded-lg border px-3 py-2"
-                  value={length}
-                  onChange={(e) => setLength(e.target.value as Length)}
-                >
-                  <option value="short">Kurz</option>
-                  <option value="medium">Mittel</option>
-                  <option value="long">Lang</option>
-                </select>
-              </div>
+          {/* Branding-Preview (immer erlaubt als Vorschau; echte Freischaltung später hinter Login) */}
+          <div className="grid gap-1">
+            <label className="text-sm font-medium">
+              Typografie {BRANDING_ENABLED ? "" : <span className="text-xs text-gray-500">(Vorschau)</span>}
+            </label>
+            <select
+              className="rounded-lg border px-3 py-2"
+              value={font}
+              onChange={(e) => setFont(e.target.value as any)}
+            >
+              <option value="Inter">Inter</option>
+              <option value="Playfair">Playfair</option>
+              <option value="Helvetica Neue">Helvetica Neue</option>
+              <option value="System">System</option>
+            </select>
+          </div>
 
-              {/* Typografie */}
-              <div>
-                <label className="block text-sm font-medium mb-1">Typografie</label>
-                <select
-                  className="w-full rounded-lg border px-3 py-2"
-                  value={fontKey}
-                  onChange={(e) => setFontKey(e.target.value as keyof typeof FONTS)}
-                >
-                  {Object.keys(FONTS).map((k) => (
-                    <option key={k} value={k}>
-                      {k}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          {err && <p className="text-sm text-red-600">{err}</p>}
 
-              {/* Actions */}
-              <div className="pt-2 flex gap-3">
-                <button
-                  onClick={handleGenerate}
-                  disabled={loading || !styleId}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  {loading ? 'Generiere…' : 'Text generieren'}
-                </button>
-                <button
-                  onClick={() => setResult('')}
-                  className="px-4 py-2 rounded-xl border"
-                >
-                  Zurücksetzen
-                </button>
-              </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+          >
+            {loading ? "Generiere…" : "Text generieren"}
+          </button>
 
-              {errorMsg && <p className="text-sm text-red-600">{errorMsg}</p>}
+          {!process.env.NEXT_PUBLIC_GENERATE_URL && (
+            <p className="text-xs text-gray-500">
+              Hinweis: <code>NEXT_PUBLIC_GENERATE_URL</code> ist nicht gesetzt – zeige Demo-Text.
+            </p>
+          )}
+        </form>
+
+        {/* Rechte Spalte: Preview */}
+        <section className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Vorschau</h2>
+            <div className="flex gap-2">
+              <button
+                className={`rounded-lg border px-3 py-1 text-sm ${device === "phone" ? "bg-gray-100" : ""}`}
+                onClick={() => setDevice("phone")}
+                type="button"
+                aria-pressed={device === "phone"}
+              >
+                Phone
+              </button>
+              <button
+                className={`rounded-lg border px-3 py-1 text-sm ${device === "tablet" ? "bg-gray-100" : ""}`}
+                onClick={() => setDevice("tablet")}
+                type="button"
+                aria-pressed={device === "tablet"}
+              >
+                Tablet
+              </button>
+              <button
+                className={`rounded-lg border px-3 py-1 text-sm ${device === "desktop" ? "bg-gray-100" : ""}`}
+                onClick={() => setDevice("desktop")}
+                type="button"
+                aria-pressed={device === "desktop"}
+              >
+                Desktop
+              </button>
             </div>
-          </aside>
+          </div>
 
-          {/* Preview */}
-          <section className="bg-white rounded-2xl shadow p-5">
-            <div className="flex flex-wrap items-center gap-3 mb-4">
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium">Device</label>
-                <select
-                  className="rounded-lg border px-3 py-1.5"
-                  value={device}
-                  onChange={(e) => setDevice(e.target.value as keyof typeof DEVICES)}
-                >
-                  {Object.entries(DEVICES).map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+          <div className="mx-auto overflow-hidden rounded-xl border" style={{ width: deviceWidth }}>
+            <article
+              className="prose max-w-none p-4"
+              style={{ fontFamily }}
+            >
+              {result.split("\n").map((line, i) => (
+                <p key={i} className="whitespace-pre-wrap leading-relaxed">
+                  {line}
+                </p>
+              ))}
+            </article>
+          </div>
 
-            {/* Vorschau */}
-            <div className="w-full overflow-auto grid place-items-center py-6">
-              <div style={{
-                width: frameMetrics.w,
-                height: frameMetrics.h,
-                borderRadius: 24,
-                boxShadow: '0 12px 30px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
-                background: '#f8fafc',
-                padding: 16,
-              }}>
-                <div style={previewStyle}>
-                  {result || '⟵ Wähle Optionen und klicke „Text generieren“…'}
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
-      </div>
+          <p className="mt-3 text-xs text-gray-500">
+            Diese Vorschau zeigt nur Typografie & Layout. Branding in Produktion wird im Login/Pro-Modus freigeschaltet.
+          </p>
+        </section>
+      </section>
+
+      {/* === CTA: Demo-Anfrage-Formular === */}
+      <LeadCTAForm className="mt-10" />
     </main>
   );
 }
