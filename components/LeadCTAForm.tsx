@@ -8,7 +8,6 @@ type LeadPayload = {
   email: string;
   instagram?: string;
   company?: string;
-  message?: string;
   consent: boolean;
   website?: string; // Honeypot
 };
@@ -19,7 +18,6 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
     email: "",
     instagram: "",
     company: "",
-    message: "",
     consent: false,
     website: "", // Honeypot
   });
@@ -27,7 +25,7 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
   const [ok, setOk] = useState(false);
   const [serverErr, setServerErr] = useState<string | null>(null);
 
-  // Button erst aktivieren, wenn alles passt
+  // Button erst aktiv, wenn alles passt
   const isValid = useMemo(() => {
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
     return form.name.trim().length > 1 && emailOk && form.consent;
@@ -36,7 +34,7 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setServerErr(null);
-    if (!isValid) return; // keine Fehltexte, nur Button disabled halten
+    if (!isValid) return;
 
     setSubmitting(true);
     try {
@@ -46,7 +44,6 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
         body: JSON.stringify(form),
       });
       if (!res.ok) {
-        // technische Fehler nur dezent anzeigen
         setServerErr("Das hat leider nicht geklappt. Bitte später erneut versuchen.");
         return;
       }
@@ -142,18 +139,6 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
           />
         </div>
 
-        <div className="grid gap-1">
-          <label className="text-sm font-medium">Wunsch-Style / Hinweise (optional)</label>
-          <textarea
-            className="rounded-lg border px-3 py-2 min-h-[96px]"
-            value={form.message || ""}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-              setForm({ ...form, message: e.target.value })
-            }
-            placeholder="Farben, Typo, Tonalität, Export-Wünsche…"
-          />
-        </div>
-
         <label className="flex items-start gap-2 text-sm">
           <input
             type="checkbox"
@@ -168,7 +153,6 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
           </span>
         </label>
 
-        {/* nur bei echten Serverfehlern kurz anzeigen */}
         {serverErr && <p className="text-sm text-red-600">{serverErr}</p>}
 
         <div className="flex">
