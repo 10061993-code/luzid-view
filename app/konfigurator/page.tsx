@@ -22,18 +22,25 @@ const DEVICES = {
 } as const;
 
 export default function KonfiguratorPage() {
-  const [slug, setSlug] = useState('lena');
+  // Creator ist fix gesetzt
+  const slug = 'lena';
+
+  // Formular-State
   const [styles, setStyles] = useState<StyleOption[]>([]);
   const [styleId, setStyleId] = useState<string>('');
   const [horoscope, setHoroscope] = useState<Horoscope>('weekly');
   const [length, setLength] = useState<Length>('medium');
   const [fontKey, setFontKey] = useState<keyof typeof FONTS>('inter');
+
+  // Preview-Steuerung
   const [device, setDevice] = useState<keyof typeof DEVICES>('phone');
 
+  // Ergebnis / Status
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [result, setResult] = useState<string>('');
 
+  // Stiloptionen laden
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -48,7 +55,9 @@ export default function KonfiguratorPage() {
         setErrorMsg('Konnte Stil-Optionen nicht laden.');
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [slug, styleId]);
 
   async function handleGenerate() {
@@ -78,6 +87,7 @@ export default function KonfiguratorPage() {
     }
   }
 
+  // Preview-Styling
   const previewStyle = useMemo<React.CSSProperties>(() => ({
     fontFamily: FONTS[fontKey],
     color: '#000000',
@@ -94,40 +104,44 @@ export default function KonfiguratorPage() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-white to-gray-50 text-gray-900">
       <div className="max-w-6xl mx-auto px-4 py-8">
+        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl md:text-3xl font-bold">🎛️ LUZID – Konfigurator</h1>
-          <Link href="/" className="text-sm text-indigo-600 hover:underline">Zur Startseite</Link>
+          <Link href="/" className="text-sm text-indigo-600 hover:underline">
+            Zur Startseite
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-[320px,1fr] gap-6">
+          {/* Sidebar */}
           <aside className="bg-white rounded-2xl shadow p-5 md:sticky md:top-4 h-fit">
             <h2 className="text-lg font-semibold mb-4">Einstellungen</h2>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Creator</label>
-                <select className="w-full rounded-lg border px-3 py-2"
-                        value={slug}
-                        onChange={(e) => { setSlug(e.target.value); setStyleId(''); }}>
-                  <option value="lena">Lena</option>
-                  <option value="paul">Paul</option>
-                </select>
-              </div>
-
+              {/* Stil */}
               <div>
                 <label className="block text-sm font-medium mb-1">Stil</label>
-                <select className="w-full rounded-lg border px-3 py-2"
-                        value={styleId}
-                        onChange={(e) => setStyleId(e.target.value)}>
-                  {styles.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                <select
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={styleId}
+                  onChange={(e) => setStyleId(e.target.value)}
+                >
+                  {styles.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
+              {/* Horoskop-Art */}
               <div>
                 <label className="block text-sm font-medium mb-1">Horoskop-Art</label>
-                <select className="w-full rounded-lg border px-3 py-2"
-                        value={horoscope}
-                        onChange={(e) => setHoroscope(e.target.value as Horoscope)}>
+                <select
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={horoscope}
+                  onChange={(e) => setHoroscope(e.target.value as Horoscope)}
+                >
                   <option value="weekly">Weekly</option>
                   <option value="birth">Birth</option>
                   <option value="partner">Partner</option>
@@ -135,53 +149,77 @@ export default function KonfiguratorPage() {
                 </select>
               </div>
 
+              {/* Textlänge */}
               <div>
                 <label className="block text-sm font-medium mb-1">Textlänge</label>
-                <select className="w-full rounded-lg border px-3 py-2"
-                        value={length}
-                        onChange={(e) => setLength(e.target.value as Length)}>
+                <select
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={length}
+                  onChange={(e) => setLength(e.target.value as Length)}
+                >
                   <option value="short">Kurz</option>
                   <option value="medium">Mittel</option>
                   <option value="long">Lang</option>
                 </select>
               </div>
 
+              {/* Typografie */}
               <div>
                 <label className="block text-sm font-medium mb-1">Typografie</label>
-                <select className="w-full rounded-lg border px-3 py-2"
-                        value={fontKey}
-                        onChange={(e) => setFontKey(e.target.value as keyof typeof FONTS)}>
-                  {Object.keys(FONTS).map(k => <option key={k} value={k}>{k}</option>)}
+                <select
+                  className="w-full rounded-lg border px-3 py-2"
+                  value={fontKey}
+                  onChange={(e) => setFontKey(e.target.value as keyof typeof FONTS)}
+                >
+                  {Object.keys(FONTS).map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
                 </select>
               </div>
 
+              {/* Actions */}
               <div className="pt-2 flex gap-3">
-                <button onClick={handleGenerate} disabled={loading || !styleId}
-                        className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50">
+                <button
+                  onClick={handleGenerate}
+                  disabled={loading || !styleId}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                >
                   {loading ? 'Generiere…' : 'Text generieren'}
                 </button>
-                <button onClick={() => setResult('')}
-                        className="px-4 py-2 rounded-xl border">Zurücksetzen</button>
+                <button
+                  onClick={() => setResult('')}
+                  className="px-4 py-2 rounded-xl border"
+                >
+                  Zurücksetzen
+                </button>
               </div>
 
               {errorMsg && <p className="text-sm text-red-600">{errorMsg}</p>}
             </div>
           </aside>
 
+          {/* Preview */}
           <section className="bg-white rounded-2xl shadow p-5">
             <div className="flex flex-wrap items-center gap-3 mb-4">
               <div className="flex items-center gap-2">
                 <label className="text-sm font-medium">Device</label>
-                <select className="rounded-lg border px-3 py-1.5"
-                        value={device}
-                        onChange={(e) => setDevice(e.target.value as keyof typeof DEVICES)}>
+                <select
+                  className="rounded-lg border px-3 py-1.5"
+                  value={device}
+                  onChange={(e) => setDevice(e.target.value as keyof typeof DEVICES)}
+                >
                   {Object.entries(DEVICES).map(([k, v]) => (
-                    <option key={k} value={k}>{v.label}</option>
+                    <option key={k} value={k}>
+                      {v.label}
+                    </option>
                   ))}
                 </select>
               </div>
             </div>
 
+            {/* Vorschau */}
             <div className="w-full overflow-auto grid place-items-center py-6">
               <div style={{
                 width: frameMetrics.w,
