@@ -18,15 +18,8 @@ function emailValid(e: string): boolean {
 export async function POST(req: Request) {
   try {
     const raw = (await req.json()) as unknown;
-    const {
-      name,
-      email,
-      instagram,
-      company,
-      message,
-      consent,
-      website,
-    } = (raw as Partial<LeadBody>) ?? {};
+    const body = (raw as Partial<LeadBody>) ?? {};
+    const { name, email, instagram, company, message, consent, website } = body;
 
     // Bot-Honeypot
     if (website && String(website).trim() !== "") {
@@ -56,10 +49,7 @@ export async function POST(req: Request) {
     });
 
     const hdrs = Object.fromEntries(req.headers.entries()) as Record<string, string>;
-    const ip =
-      (hdrs["x-forwarded-for"] || "")
-        .split(",")[0]
-        ?.trim() || null;
+    const ip = (hdrs["x-forwarded-for"] || "").split(",")[0]?.trim() || null;
     const user_agent = hdrs["user-agent"] || null;
     const referer = hdrs["referer"] || null;
 
@@ -79,14 +69,12 @@ export async function POST(req: Request) {
 
     const { error } = await supabase.from("leads").insert(payload);
     if (error) {
-      // eslint-disable-next-line no-console
       console.error("Supabase insert error", error);
       return NextResponse.json({ error: "DB_ERROR" }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error: unknown) {
-    // eslint-disable-next-line no-console
     console.error("Lead API error", error);
     const msg = error instanceof Error ? error.message : "UNEXPECTED";
     return NextResponse.json({ error: msg }, { status: 500 });

@@ -29,13 +29,22 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
 
   const bookingUrl = process.env.NEXT_PUBLIC_BOOKING_URL || "/kontakt";
 
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErr(null);
 
-    if (!form.name.trim()) return setErr("Bitte deinen Namen angeben.");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return setErr("Bitte eine gültige E-Mail eingeben.");
-    if (!form.consent) return setErr("Bitte Einwilligung zur Kontaktaufnahme bestätigen.");
+    if (!form.name.trim()) {
+      setErr("Bitte deinen Namen angeben.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      setErr("Bitte eine gültige E-Mail eingeben.");
+      return;
+    }
+    if (!form.consent) {
+      setErr("Bitte Einwilligung zur Kontaktaufnahme bestätigen.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -49,8 +58,9 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
         throw new Error(t || "Fehler beim Absenden.");
       }
       setOk(true);
-    } catch (e: any) {
-      setErr(e.message || "Unerwarteter Fehler.");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Unerwarteter Fehler.";
+      setErr(msg);
     } finally {
       setSubmitting(false);
     }
@@ -87,7 +97,9 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
             name="website"
             autoComplete="off"
             value={form.website}
-            onChange={(e) => setForm({ ...form, website: e.target.value })}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setForm({ ...form, website: e.target.value })
+            }
           />
         </div>
 
@@ -96,7 +108,9 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
           <input
             className="rounded-lg border px-3 py-2"
             value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setForm({ ...form, name: e.target.value })
+            }
             placeholder="Vor- und Nachname"
             required
           />
@@ -108,7 +122,9 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
             type="email"
             className="rounded-lg border px-3 py-2"
             value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setForm({ ...form, email: e.target.value })
+            }
             placeholder="dein@email.de"
             required
           />
@@ -119,7 +135,9 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
           <input
             className="rounded-lg border px-3 py-2"
             value={form.instagram || ""}
-            onChange={(e) => setForm({ ...form, instagram: e.target.value })}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setForm({ ...form, instagram: e.target.value })
+            }
             placeholder="@deinhandle"
           />
         </div>
@@ -129,7 +147,9 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
           <input
             className="rounded-lg border px-3 py-2"
             value={form.company || ""}
-            onChange={(e) => setForm({ ...form, company: e.target.value })}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setForm({ ...form, company: e.target.value })
+            }
             placeholder="z. B. Creator-Name, Label"
           />
         </div>
@@ -139,7 +159,9 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
           <textarea
             className="rounded-lg border px-3 py-2 min-h-[96px]"
             value={form.message || ""}
-            onChange={(e) => setForm({ ...form, message: e.target.value })}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+              setForm({ ...form, message: e.target.value })
+            }
             placeholder="Farben, Typo, Tonalität, Export-Wünsche…"
           />
         </div>
@@ -148,7 +170,9 @@ export default function LeadCTAForm({ className = "" }: { className?: string }) 
           <input
             type="checkbox"
             checked={form.consent}
-            onChange={(e) => setForm({ ...form, consent: e.target.checked })}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setForm({ ...form, consent: e.target.checked })
+            }
           />
           <span>
             Ich bin einverstanden, dass LUZID mich per E-Mail kontaktiert. Ich habe die{" "}
