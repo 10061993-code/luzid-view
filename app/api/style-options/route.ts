@@ -1,4 +1,4 @@
-kimport { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getFonts, getTextColors } from "@/lib/registry";
 
 export async function GET() {
