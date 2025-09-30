@@ -1,47 +1,29 @@
 // app/api/style/[slug]/route.ts
 import { NextResponse } from "next/server";
+import { getFonts, getTextColors } from "@/lib/registry";
 
-export const dynamic = "force-dynamic";
-const backend = process.env.BACKEND_URL || "http://localhost:8787";
-
-export async function POST(req: Request) {
-  try {
-    const url = new URL(req.url);
-    const parts = url.pathname.split("/");
-    const slug = parts[parts.length - 1] || "";
-    if (!slug) {
-      return NextResponse.json({ error: true, message: "Missing slug" }, { status: 400 });
-    }
-
-    let payload: unknown = {};
-    try { payload = await req.json(); } catch {}
-
-    const res = await fetch(`${backend}/style/${encodeURIComponent(slug)}`, {
-      method: "POST",
-      cache: "no-store",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const text = await res.text();
-    try {
-      return NextResponse.json(JSON.parse(text), { status: res.status });
-    } catch {
-      return new NextResponse(text, {
-        status: res.status,
-        headers: { "content-type": res.headers.get("content-type") || "text/plain" },
-      });
-    }
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Upstream unreachable";
-    return NextResponse.json({ error: true, message }, { status: 502 });
-  }
+export async function GET(
+  _req: Request,
+  { params }: { params: { slug: string } }
+) {
+  return NextResponse.json({
+    ok: true,
+    slug: params.slug,
+    fonts: getFonts(),
+    textColors: getTextColors(),
+  });
 }
 
-export async function GET() {
-  return NextResponse.json(
-    { ok: true, hint: "Use POST with JSON body to /api/style/:slug" },
-    { status: 200 }
-  );
+export async function POST(
+  req: Request,
+  { params }: { params: { slug: string } }
+) {
+  const body = await req.json().catch(() => ({}));
+  return NextResponse.json({
+    ok: true,
+    slug: params.slug,
+    received: body,
+    hint: "Persistenz später hier implementieren.",
+  });
 }
 
