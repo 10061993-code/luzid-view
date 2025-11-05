@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 
 "use client";
 
@@ -55,7 +54,6 @@ export default function PdfButton({ slug, date, folder = "weekly" }: Props) {
       setHref(null);
     })();
     return () => { stop = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, date, base, bucket]);
 
   if (!href) {
