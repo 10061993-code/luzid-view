@@ -1,15 +1,27 @@
+// Engine-Model-Client – globalThis-sicher (kein direkter process/fetch Zugriff)
 export async function callModel({ system, user }) {
-  const hasProcess = typeof process !== "undefined" && !!process?.env;
-  const url = hasProcess ? process.env.GEN_API_URL : undefined;
-  const key = hasProcess ? process.env.GEN_API_KEY : undefined;
+  // Env nur lesen, wenn globalThis.process existiert
+  const env =
+    typeof globalThis !== "undefined" &&
+    globalThis.process &&
+    globalThis.process.env
+      ? globalThis.process.env
+      : undefined;
+
+  const url = env?.GEN_API_URL;
+  const key = env?.GEN_API_KEY;
 
   // Remote-Mode (falls konfiguriert)
   if (url && key) {
-    const res = await globalThis.fetch(url, {
+    const f = typeof globalThis.fetch === "function" ? globalThis.fetch : undefined;
+    if (!f) throw new Error("fetch() ist in dieser Runtime nicht verfügbar.");
+
+    const res = await f(url, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
       body: JSON.stringify({ system, user })
     });
+
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       throw new Error(`Upstream ${res.status}: ${txt.slice(0, 400)}`);
@@ -19,6 +31,7 @@ export async function callModel({ system, user }) {
   }
 
   // Stub (lokal)
-  return { text: `(${new Date().toISOString()})\n\n${system}\n\nUSER: ${String(user).slice(0, 220)}…` };
+  const stamp = new Date().toISOString();
+  return { text: `(${stamp})\n\n${system}\n\nUSER: ${String(user).slice(0, 220)}…` };
 }
 

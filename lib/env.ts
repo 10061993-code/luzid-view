@@ -10,9 +10,7 @@ type EnvType = z.infer<typeof EnvSchema>;
 
 const parsed = EnvSchema.safeParse(process.env);
 if (!parsed.success) {
-  // präziser Fehler ohne any
   const flat = parsed.error.flatten();
-  // eslint-disable-next-line no-console
   console.error("Environment validation failed:", flat);
   throw new Error("Invalid environment. Please set required variables.");
 }
