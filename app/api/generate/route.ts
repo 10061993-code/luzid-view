@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getLengthBudget } from "../../../lib/contentPresets";
 import type { GeneratorPayload } from "../../../lib/types";
 
-export const runtime = "nodejs";       // für sicheren Zugriff auf env
+export const runtime = "nodejs";        // für sicheren Zugriff auf env
 export const dynamic = "force-dynamic"; // keine Build-Time-Caches
 
 function badRequest(message: string, details?: unknown) {
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
 
   // --- 5) Upstream-Call (mit Timeout & sauberem Error-Handling)
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), 25_000); // 25s Timeout
+  const id = setTimeout(() => controller.abort(), 25_000); // 25 s Timeout
 
   try {
     const res = await fetch(GEN_API_URL, {
@@ -66,12 +66,10 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify(generatorBody),
       signal: controller.signal,
-      // keepalive: true  // optional
     });
 
     clearTimeout(id);
 
-    // Upstream-Fehler → durchreichen
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       return NextResponse.json(
@@ -80,14 +78,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // Erfolgsfall
     const data = (await res.json().catch(() => ({}))) as { text?: string; [k: string]: unknown };
     return NextResponse.json({ text: data?.text ?? "" }, { status: 200 });
-  } catch (err: any) {
+  } catch (err) {
     clearTimeout(id);
-    const aborted = err?.name === "AbortError";
+    const aborted = err instanceof Error && err.name === "AbortError";
+    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: aborted ? "Generator-Timeout" : "Generator nicht erreichbar", details: String(err?.message || err) },
+      { error: aborted ? "Generator-Timeout" : "Generator nicht erreichbar", details: message },
       { status: aborted ? 504 : 502 }
     );
   }

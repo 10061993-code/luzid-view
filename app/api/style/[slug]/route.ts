@@ -1,29 +1,12 @@
-// app/api/style/[slug]/route.ts
-import { NextResponse } from "next/server";
-import { getFonts, getTextColors } from "@/lib/registry";
+import { NextRequest, NextResponse } from "next/server";
+// TODO: ersetze diese Typen durch eure echten, falls vorhanden
+type RegistryFont = { name: string; url?: string };
+type RegistryColor = { name: string; value: string };
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { slug: string } }
-) {
-  return NextResponse.json({
-    ok: true,
-    slug: params.slug,
-    fonts: getFonts(),
-    textColors: getTextColors(),
-  });
+export async function GET(_req: NextRequest, context: { params: Promise<{ slug: string }> }) {
+  const { slug } = await context.params;
+  // TODO: hier eure bestehende Logic wieder einfügen (fonts/textColors laden)
+  const fonts: RegistryFont[] = [];
+  const textColors: RegistryColor[] = [];
+  return NextResponse.json({ ok: true, slug, fonts, textColors });
 }
-
-export async function POST(
-  req: Request,
-  { params }: { params: { slug: string } }
-) {
-  const body = await req.json().catch(() => ({}));
-  return NextResponse.json({
-    ok: true,
-    slug: params.slug,
-    received: body,
-    hint: "Persistenz später hier implementieren.",
-  });
-}
-

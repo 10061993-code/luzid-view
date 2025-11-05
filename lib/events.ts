@@ -44,3 +44,11 @@ export function getEvent(id: EventId): EventMeta {
   return meta;
 }
 
+
+export type SimpleEvent = { date: string; title: string; location?: string };
+
+/** Stub: bitte später durch eure echte Implementierung ersetzen */
+export function eventsInNextDays(days: number): SimpleEvent[] {
+  void days; // unused
+  return [];
+}
