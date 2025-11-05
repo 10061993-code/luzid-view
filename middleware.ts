@@ -1,21 +1,36 @@
-import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+
+// einfacher In-Memory Store (pro Prozess)
+const buckets = new Map<string, { tokens: number; ts: number }>();
+const WINDOW_MS = 60_000;
+
+function take(ip: string, limitPerMin = 60) {
+  const now = Date.now();
+  const rec = buckets.get(ip) || { tokens: limitPerMin, ts: now };
+  const elapsed = now - rec.ts;
+  const refill = Math.floor(elapsed / (WINDOW_MS / limitPerMin));
+  rec.tokens = Math.min(limitPerMin, rec.tokens + refill);
+  rec.ts = rec.ts + refill * (WINDOW_MS / limitPerMin);
+  if (rec.tokens > 0) rec.tokens -= 1;
+  buckets.set(ip, rec);
+  return rec.tokens >= 0;
+}
 
 export function middleware(req: NextRequest) {
-  const p = req.nextUrl.pathname;
-
-  // API bleibt öffentlich
-  if (p.startsWith("/api/")) return NextResponse.next();
-
-  // Admin schützen
-  if (p.startsWith("/admin")) {
-    const token = req.headers.get("x-admin-token") || req.cookies.get("admin-token")?.value;
-    if (token === process.env.ADMIN_PROTECTION_TOKEN) return NextResponse.next();
-    return new NextResponse("Unauthorized", { status: 401 });
+  // nur auf die generate-API anwenden
+  if (req.nextUrl.pathname.startsWith("/api/generate")) {
+    const ip = req.ip ?? req.headers.get("x-forwarded-for") ?? "anon";
+    const ok = take(String(ip), 60);
+    if (!ok) {
+      return NextResponse.json({ ok: false, error: "Rate limit exceeded" }, { status: 429 });
+    }
   }
-
   return NextResponse.next();
 }
 
-export const config = { matcher: ["/api/:path*", "/admin/:path*"] };
+// optional: nur auf /api/generate matchen
+export const config = {
+  matcher: ["/api/generate/:path*"],
+};
 

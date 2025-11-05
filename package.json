@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,19 +12,17 @@
     "prepare": "husky",
     "prebuild": "eslint . --max-warnings=0"
   },
-
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": "eslint --fix",
     "*.{js,jsx,ts,tsx,css,md,json}": "prettier --write"
   },
-
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",
     "next": "15.5.3",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "zod": "^4.1.12"
   },
-
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@tailwindcss/postcss": "^4",
@@ -43,10 +40,8 @@
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.46.3"
   },
-
   "engines": {
     "node": ">=20.10.0",
     "npm": ">=10.0.0"
   }
 }
-
