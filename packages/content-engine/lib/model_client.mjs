@@ -1,6 +1,29 @@
-// Engine-Model-Client – robust mit explizitem Remote-Opt-in + Timeout + Stub-Fallback
-export async function callModel({ system, user }) {
-  // Env nur lesen, wenn globalThis.process verfügbar ist
+// Engine-Model-Client – robust: explizites Remote-Opt-in, Timeout ohne AbortController, Stub-Fallback
+
+// kleines Timeout-Helferlein ohne Globals
+async function withTimeout(promise, ms) {
+  let timer;
+  try {
+    const timeout = new Promise((_, rej) => {
+      // setTimeout über globalThis sichern (falls nicht vorhanden, sehr hoher Timeout ⇒ praktisch nie)
+      const setTO = typeof globalThis !== "undefined" && globalThis.setTimeout
+        ? globalThis.setTimeout.bind(globalThis)
+        : null;
+      if (setTO) {
+        timer = setTO(() => rej(new Error("timeout")), ms);
+      }
+    });
+    // Rennen: fetch vs. Timeout
+    return await Promise.race([promise, timeout]);
+  } finally {
+    const clearTO = typeof globalThis !== "undefined" && globalThis.clearTimeout
+      ? globalThis.clearTimeout.bind(globalThis)
+      : null;
+    if (timer && clearTO) clearTO(timer);
+  }
+}
+
+function readEnv() {
   const env =
     typeof globalThis !== "undefined" &&
     globalThis.process &&
@@ -8,45 +31,40 @@ export async function callModel({ system, user }) {
       ? globalThis.process.env
       : undefined;
 
-  const url = env?.GEN_API_URL;
-  const key = env?.GEN_API_KEY;
+  return {
+    url: env?.GEN_API_URL,
+    key: env?.GEN_API_KEY,
+    allowRemote: env?.ENGINE_REMOTE === "1"
+  };
+}
 
-  // Remote nur, wenn ENGINE_REMOTE=1 gesetzt ist und URL+KEY vorhanden sind
-  const allowRemote = env?.ENGINE_REMOTE === "1" && !!url && !!key;
+export async function callModel({ system, user }) {
+  const { url, key, allowRemote } = readEnv();
 
-  if (allowRemote) {
-    const f = typeof globalThis.fetch === "function" ? globalThis.fetch : undefined;
-    if (!f) {
-      // Kein fetch in dieser Runtime -> Stub
-      return stub(system, user, { remoteTried: false });
-    }
-
-    // Timeout (15s)
-    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-    const id = controller ? setTimeout(() => controller.abort(), 15_000) : null;
+  // Nur wenn ENGINE_REMOTE=1 und URL+KEY vorhanden sind, remote versuchen
+  if (allowRemote && url && key) {
+    const f = typeof globalThis.fetch === "function" ? globalThis.fetch : null;
+    if (!f) return stub(system, user, { remoteTried: false, reason: "no fetch in runtime" });
 
     try {
-      const res = await f(url, {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-        body: JSON.stringify({ system, user }),
-        signal: controller?.signal
-      });
+      const res = await withTimeout(
+        f(url, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+          body: JSON.stringify({ system, user })
+        }),
+        15000 // 15s
+      );
 
-      if (id) clearTimeout(id);
-
-      if (!res.ok) {
-        // Upstream-Fehler -> Stub-Fallback
-        const txt = await res.text().catch(() => "");
-        return stub(system, user, { remoteTried: true, upstream: `${res.status} ${txt.slice(0,400)}` });
+      if (!res || !res.ok) {
+        const txt = res && typeof res.text === "function" ? await res.text().catch(() => "") : "";
+        return stub(system, user, { remoteTried: true, upstream: res ? String(res.status) : "no response", body: txt.slice(0, 400) });
       }
 
       const data = await res.json().catch(() => ({}));
       const text = typeof data?.text === "string" ? data.text : "";
       return { text, meta: { remote: true, remoteTried: true } };
     } catch (e) {
-      if (id) clearTimeout(id);
-      // Netzwerk/Timeout -> Stub-Fallback
       return stub(system, user, { remoteTried: true, error: String(e?.message ?? e) });
     }
   }
