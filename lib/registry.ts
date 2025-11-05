@@ -1,5 +1,5 @@
 // lib/registry.ts
-// Zentrale, fehlertolerante Registry für Events, Stile (Themes), Fonts, Textfarben – ohne `any` und ohne `.default`-Zugriffe.
+// Registry für Events, Themes, Fonts, Textfarben – strikt typisiert & ESM-Proxy-sicher.
 
 import * as eventsLib from "@/lib/events";
 import * as themesLib from "@/lib/themes";
@@ -59,66 +59,75 @@ function asArray<T = unknown>(u: unknown): T[] {
   return Array.isArray(u) ? (u as T[]) : [];
 }
 
-/** Liefert das erste Array, das unter den Keys gefunden wird (keine `.default`-Prüfung). */
-function pickArray(u: unknown, keys: string[]): unknown[] | null {
-  if (!isRecord(u)) return null;
-  for (const k of keys) {
-    const v = u[k];
-    if (Array.isArray(v)) return v;
+/** Nur sichere Keys lesen: erst exportierte Keys listen, dann zugreifen. */
+function getIfExported(mod: unknown, key: string): unknown | undefined {
+  if (!isRecord(mod)) return undefined;
+  const keys = Object.keys(mod as object);
+  if (!keys.includes(key)) return undefined;
+  // jetzt ist der Key tatsächlich exportiert → Zugriff ist safe
+  return (mod as Record<string, unknown>)[key];
+}
+
+/** Erst alle exportierten Keys listen, dann den ersten passenden Array-Wert holen. */
+function pickExportedArray(mod: unknown, preferredKeys: string[]): unknown[] | null {
+  if (!isRecord(mod)) return null;
+  const exported = new Set(Object.keys(mod as object));
+  for (const k of preferredKeys) {
+    if (exported.has(k)) {
+      const v = (mod as Record<string, unknown>)[k];
+      if (Array.isArray(v)) return v;
+      if (isRecord(v) && Array.isArray(v["items"])) return v["items"] as unknown[];
+    }
   }
   return null;
 }
 
-/** Objekt-Werte (nur objektartige) als Array. */
-function objectValuesArray(u: unknown): unknown[] {
-  if (!isRecord(u)) return [];
-  return Object.values(u).filter((v) => typeof v === "object" && v !== null);
-}
-
-/** Prüft, ob Objekt eine Function unter dem Namen besitzt. */
-function hasFunction<T extends string>(
-  u: unknown,
-  name: T
-): u is Record<T, (...args: unknown[]) => unknown> {
-  return isRecord(u) && typeof u[name] === "function";
+/** Objekt-Werte (nur objektartige) der tatsächlich exportierten Keys. */
+function exportedObjectValues(mod: unknown): unknown[] {
+  if (!isRecord(mod)) return [];
+  const vals: unknown[] = [];
+  for (const k of Object.keys(mod as object)) {
+    const v = (mod as Record<string, unknown>)[k];
+    if (isRecord(v)) vals.push(v);
+  }
+  return vals;
 }
 
 /* ======================= EVENTS ======================= */
 
 export function getEventsNext14Days(from: Date = new Date()): RegistryEvent[] {
-  if (hasFunction(eventsLib, "eventsInNextDays")) {
-    const maybe = eventsLib.eventsInNextDays(14 as unknown as number, from) as unknown;
-    const list = asArray(maybe).map((e, i): RegistryEvent | null => {
+  // 1) Bevorzugt: Helper-Funktion, aber nur wenn tatsächlich exportiert
+  const maybeFn = getIfExported(eventsLib, "eventsInNextDays");
+  if (typeof maybeFn === "function") {
+    const maybeList = (maybeFn as (d: number, f?: Date) => unknown)(14, from) as unknown;
+    const list = asArray(maybeList).map((e, i): RegistryEvent | null => {
       const rec = isRecord(e) ? e : {};
       const id =
         toStringOr(rec["id"], "") ||
         toStringOr(rec["key"], "") ||
         toStringOr(rec["slug"], "") ||
         String(i);
-
       const start =
         toNullableString(rec["startUTC"]) ??
         toNullableString(rec["date"]) ??
         toNullableString(rec["start"]) ??
         "";
-
       const title = toStringOr(rec["title"], "") || "Event";
       const zodiac = toNullableString(rec["zodiac"]);
       const description = toNullableString(rec["description"]);
       const type = toNullableString(rec["type"]);
-      const tagsRaw = rec["tags"];
-      const tags = isStringArray(tagsRaw) ? tagsRaw : null;
+      const tags = isStringArray(rec["tags"]) ? (rec["tags"] as string[]) : null;
 
       if (!isISODate(start)) return null;
-
       return { id, title, startUTC: start, zodiac, description, type, tags };
     });
-
     return list.filter((x): x is RegistryEvent => x !== null).sort((a, b) => a.startUTC.localeCompare(b.startUTC));
   }
 
-  // Fallback: bekannte Array-Keys prüfen
-  const base = pickArray(eventsLib, ["ASTRO_EVENTS_NEXT_2W", "EVENTS", "events"]) ?? [];
+  // 2) Fallback: Arrays aus bekannten Keys, aber nur wenn wirklich exportiert
+  const base =
+    pickExportedArray(eventsLib, ["ASTRO_EVENTS_NEXT_2W", "EVENTS", "events"]) ?? [];
+
   const list = asArray(base).map((e, i): RegistryEvent | null => {
     const rec = isRecord(e) ? e : {};
     const id =
@@ -126,22 +135,18 @@ export function getEventsNext14Days(from: Date = new Date()): RegistryEvent[] {
       toStringOr(rec["key"], "") ||
       toStringOr(rec["slug"], "") ||
       String(i);
-
     const start =
       toNullableString(rec["startUTC"]) ??
       toNullableString(rec["date"]) ??
       toNullableString(rec["start"]) ??
       "";
-
     const title = toStringOr(rec["title"], "") || "Event";
     const zodiac = toNullableString(rec["zodiac"]);
     const description = toNullableString(rec["description"]);
     const type = toNullableString(rec["type"]);
-    const tagsRaw = rec["tags"];
-    const tags = isStringArray(tagsRaw) ? tagsRaw : null;
+    const tags = isStringArray(rec["tags"]) ? (rec["tags"] as string[]) : null;
 
     if (!isISODate(start)) return null;
-
     return { id, title, startUTC: start, zodiac, description, type, tags };
   });
 
@@ -151,33 +156,16 @@ export function getEventsNext14Days(from: Date = new Date()): RegistryEvent[] {
 /* ======================= THEMES / STILE ======================= */
 
 export function getThemes(): RegistryTheme[] {
-  // 1) Kandidaten-Keys (ohne `.default`)
-  const candidates: unknown[] = [
-    (themesLib as Record<string, unknown>)["THEMES"],
-    (themesLib as Record<string, unknown>)["THEME_PRESETS"],
-    (themesLib as Record<string, unknown>)["PRESETS"],
-    (themesLib as Record<string, unknown>)["items"],
-  ].filter(Boolean);
+  // 1) Exportierte Kandidaten-Keys (keine .default-Probes)
+  const base =
+    pickExportedArray(themesLib, ["THEMES", "THEME_PRESETS", "PRESETS", "items"]) ??
+    (() => {
+      // 2) Fallback: alle exportierten Werte einsammeln
+      const vals = exportedObjectValues(themesLib);
+      return vals.length ? vals : [];
+    })();
 
-  let base: unknown[] = [];
-  for (const c of candidates) {
-    if (Array.isArray(c)) {
-      base = c;
-      break;
-    }
-    if (isRecord(c) && Array.isArray(c["items"])) {
-      base = c["items"] as unknown[];
-      break;
-    }
-  }
-
-  // 2) Fallback: Werte aus dem Modul (ohne .default)
-  if (base.length === 0) {
-    const vals = objectValuesArray(themesLib);
-    if (vals.length) base = vals;
-  }
-
-  if (base.length === 0) {
+  if ((base as unknown[]).length === 0) {
     return [
       { id: "style-1", name: "Stil 1", previewCssUrl: null },
       { id: "style-2", name: "Stil 2", previewCssUrl: null },
@@ -211,20 +199,14 @@ export function getThemes(): RegistryTheme[] {
 /* ======================= FONTS ======================= */
 
 export function getFonts(): RegistryFont[] {
-  const fromContent = pickArray(contentLib, ["FONTS", "FONT_PRESETS", "TYPOGRAPHY", "TYPO_PRESETS"]);
-  const fromThemes = pickArray(themesLib, ["FONTS", "FONT_PRESETS", "TYPOGRAPHY", "TYPO_PRESETS"]);
-
-  let base: unknown[] = fromContent ?? fromThemes ?? [];
-
-  // Fallback: Werte aus contentLib (ohne `.default`)
-  if (base.length === 0) {
-    const vals = objectValuesArray(contentLib);
-    // falls ein Objekt mit `fonts` drinsteckt
-    const maybeFonts = vals.find((v) => isRecord(v) && Array.isArray(v["fonts"]));
-    if (maybeFonts && isRecord(maybeFonts)) {
-      base = (maybeFonts["fonts"] as unknown[]) ?? [];
-    }
-  }
+  const base =
+    pickExportedArray(contentLib, ["FONTS", "FONT_PRESETS", "TYPOGRAPHY", "TYPO_PRESETS"]) ??
+    pickExportedArray(themesLib, ["FONTS", "FONT_PRESETS", "TYPOGRAPHY", "TYPO_PRESETS"]) ??
+    (() => {
+      const vals = exportedObjectValues(contentLib);
+      const hit = vals.find((v) => isRecord(v) && Array.isArray(v["fonts"]));
+      return hit && isRecord(hit) ? ((hit["fonts"] as unknown[]) ?? []) : [];
+    })();
 
   const normalized = asArray(base).map((f, i): RegistryFont => {
     const rec = isRecord(f) ? f : {};
@@ -264,19 +246,14 @@ export function getFonts(): RegistryFont[] {
 /* ======================= TEXT COLORS ======================= */
 
 export function getTextColors(): RegistryColor[] {
-  const fromContent = pickArray(contentLib, ["TEXT_COLORS", "TEXTCOLOR_PRESETS", "COLORS_TEXT"]);
-  const fromThemes = pickArray(themesLib, ["TEXT_COLORS", "TEXTCOLOR_PRESETS", "COLORS_TEXT"]);
-
-  let base: unknown[] = fromContent ?? fromThemes ?? [];
-
-  // Fallback: Werte aus contentLib (ohne `.default`)
-  if (base.length === 0) {
-    const vals = objectValuesArray(contentLib);
-    const maybe = vals.find((v) => isRecord(v) && Array.isArray(v["textColors"]));
-    if (maybe && isRecord(maybe)) {
-      base = (maybe["textColors"] as unknown[]) ?? [];
-    }
-  }
+  const base =
+    pickExportedArray(contentLib, ["TEXT_COLORS", "TEXTCOLOR_PRESETS", "COLORS_TEXT"]) ??
+    pickExportedArray(themesLib, ["TEXT_COLORS", "TEXTCOLOR_PRESETS", "COLORS_TEXT"]) ??
+    (() => {
+      const vals = exportedObjectValues(contentLib);
+      const hit = vals.find((v) => isRecord(v) && Array.isArray(v["textColors"]));
+      return hit && isRecord(hit) ? ((hit["textColors"] as unknown[]) ?? []) : [];
+    })();
 
   const normalized = asArray(base).map((c, i): RegistryColor => {
     const rec = isRecord(c) ? c : {};
