@@ -1,4 +1,4 @@
-// eslint.config.cjs — Flat Config (CommonJS) für ESLint 9 + Next 15 + Prettier
+// eslint.config.cjs — Flat Config (CommonJS) für ESLint 9 + Next 15 + Prettier (ohne Rushstack)
 const js = require("@eslint/js");
 const tseslint = require("typescript-eslint");
 const next = require("eslint-config-next");
@@ -7,27 +7,37 @@ const prettier = require("eslint-config-prettier");
 
 /** @type {import("eslint").Linter.FlatConfig[]} */
 module.exports = [
-  // Globale Ignorierliste
+  // 0) Globale Ignorierliste
   {
-    ignores: ["node_modules/**", ".next/**", "dist/**", "next-env.d.ts"],
+    ignores: [
+      "node_modules/**",
+      ".next/**",
+      "dist/**",
+      "next-env.d.ts", // auto-generiert
+    ],
   },
 
-  // Baseline-Regeln
+  // 1) Basis JS-Regeln
   js.configs.recommended,
-  ...tseslint.configs.recommended,
-  ...(next?.configs?.recommended ? next.configs.recommended : []),
 
-  // React Hooks
+  // 2) TypeScript-Empfehlungen (schnell, ohne type-check)
+  ...tseslint.configs.recommended,
+
+  // 3) Next.js-Empfehlungen (Flat Config)
+  ...(next && next.configs && next.configs.recommended ? next.configs.recommended : []),
+
+  // 4) React Hooks (Plugin explizit registrieren)
   {
     files: ["**/*.{js,jsx,ts,tsx}"],
     plugins: { "react-hooks": reactHooks },
     rules: {
       "react-hooks/rules-of-hooks": "error",
+      // Exhaustive deps nicht global erzwingen (wir managen das gezielt pro Datei)
       "react-hooks/exhaustive-deps": "off",
     },
   },
 
-  // Node Globals für CJS
+  // 5) CJS-Dateien (z. B. diese Config): Node-Globals erlauben, require zulassen
   {
     files: ["**/*.cjs"],
     languageOptions: {
@@ -45,19 +55,23 @@ module.exports = [
     },
   },
 
-  // Temporäre Ausnahmen (bis getypte Dateien fertig sind)
+  // 6) Gezielte temporäre Ausnahme — NUR noch für den Konfigurator
   {
-    files: ["lib/registry.ts", "app/konfigurator/page.tsx"],
-    rules: { "@typescript-eslint/no-explicit-any": "off" },
+    files: ["app/konfigurator/page.tsx"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
   },
 
-  // Kleine Hausregeln
+  // 7) Kleine Hausregeln
   {
     files: ["lib/storage.ts"],
-    rules: { "no-empty": ["error", { allowEmptyCatch: true }] },
+    rules: {
+      "no-empty": ["error", { allowEmptyCatch: true }],
+    },
   },
 
-  // 🔧 Prettier — deaktiviert ESLint-Formatierungsregeln, nutzt Prettier-Stil
+  // 8) Prettier: schaltet kollidierende Formatierungsregeln von ESLint aus
   prettier,
 ];
 
