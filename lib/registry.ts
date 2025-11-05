@@ -1,6 +1,5 @@
 // lib/registry.ts
-// Zentrale, fehlertolerante Registry für Events, Stile (Themes), Fonts, Textfarben.
-// Ziel: robust gegen unterschiedliche Export-Formen in den Libs – ohne `any`.
+// Zentrale, fehlertolerante Registry für Events, Stile (Themes), Fonts, Textfarben – ohne `any` und ohne `.default`-Zugriffe.
 
 import * as eventsLib from "@/lib/events";
 import * as themesLib from "@/lib/themes";
@@ -36,60 +35,47 @@ export type RegistryColor = {
   hex?: string | null;
 };
 
-/* ======================= Type Guards & Utils ======================= */
+/* ======================= Guards & Utils ======================= */
 
 function isRecord(u: unknown): u is Record<string, unknown> {
   return typeof u === "object" && u !== null;
 }
-
 function isString(u: unknown): u is string {
   return typeof u === "string";
 }
-
 function isStringArray(u: unknown): u is string[] {
   return Array.isArray(u) && u.every((x) => typeof x === "string");
 }
-
 function isISODate(s: unknown): s is string {
   return isString(s) && !Number.isNaN(Date.parse(s));
 }
-
 function toStringOr(u: unknown, fallback: string): string {
   return isString(u) ? u : fallback;
 }
-
 function toNullableString(u: unknown): string | null {
   return isString(u) ? u : null;
 }
-
-/** Safe array extractor – liefert immer ein Array (sonst leeres). */
 function asArray<T = unknown>(u: unknown): T[] {
   return Array.isArray(u) ? (u as T[]) : [];
 }
 
-/** Liefert das erste Array, das unter den Keys (oder in default[keys]) gefunden wird. */
+/** Liefert das erste Array, das unter den Keys gefunden wird (keine `.default`-Prüfung). */
 function pickArray(u: unknown, keys: string[]): unknown[] | null {
   if (!isRecord(u)) return null;
-
   for (const k of keys) {
     const v = u[k];
     if (Array.isArray(v)) return v;
   }
-
-  const d = u["default"];
-  if (Array.isArray(d)) return d as unknown[];
-
-  if (isRecord(d)) {
-    for (const k of keys) {
-      const v = d[k];
-      if (Array.isArray(v)) return v;
-    }
-  }
-
   return null;
 }
 
-/** Prüft, ob Objekt eine Function unter dem gegebenen Namen besitzt. */
+/** Objekt-Werte (nur objektartige) als Array. */
+function objectValuesArray(u: unknown): unknown[] {
+  if (!isRecord(u)) return [];
+  return Object.values(u).filter((v) => typeof v === "object" && v !== null);
+}
+
+/** Prüft, ob Objekt eine Function unter dem Namen besitzt. */
 function hasFunction<T extends string>(
   u: unknown,
   name: T
@@ -97,18 +83,10 @@ function hasFunction<T extends string>(
   return isRecord(u) && typeof u[name] === "function";
 }
 
-/** Werte eines Objekts (nur objektartige) als Array zurückgeben. */
-function objectValuesArray(u: unknown): unknown[] {
-  if (!isRecord(u)) return [];
-  return Object.values(u).filter((v) => typeof v === "object" && v !== null);
-}
-
 /* ======================= EVENTS ======================= */
 
 export function getEventsNext14Days(from: Date = new Date()): RegistryEvent[] {
-  // Bevorzugt Helper-Funktion aus eventsLib nutzen, wenn vorhanden
   if (hasFunction(eventsLib, "eventsInNextDays")) {
-    // versuchen: eventsInNextDays(days, from?)
     const maybe = eventsLib.eventsInNextDays(14 as unknown as number, from) as unknown;
     const list = asArray(maybe).map((e, i): RegistryEvent | null => {
       const rec = isRecord(e) ? e : {};
@@ -124,9 +102,7 @@ export function getEventsNext14Days(from: Date = new Date()): RegistryEvent[] {
         toNullableString(rec["start"]) ??
         "";
 
-      const title =
-        toStringOr(rec["title"], "") || "Event";
-
+      const title = toStringOr(rec["title"], "") || "Event";
       const zodiac = toNullableString(rec["zodiac"]);
       const description = toNullableString(rec["description"]);
       const type = toNullableString(rec["type"]);
@@ -135,24 +111,14 @@ export function getEventsNext14Days(from: Date = new Date()): RegistryEvent[] {
 
       if (!isISODate(start)) return null;
 
-      return {
-        id,
-        title,
-        startUTC: start,
-        zodiac,
-        description,
-        type,
-        tags,
-      };
+      return { id, title, startUTC: start, zodiac, description, type, tags };
     });
 
     return list.filter((x): x is RegistryEvent => x !== null).sort((a, b) => a.startUTC.localeCompare(b.startUTC));
   }
 
-  // Fallback: Arrays direkt aus der Lib greifen
-  const base =
-    pickArray(eventsLib, ["ASTRO_EVENTS_NEXT_2W", "EVENTS", "events"]) ?? [];
-
+  // Fallback: bekannte Array-Keys prüfen
+  const base = pickArray(eventsLib, ["ASTRO_EVENTS_NEXT_2W", "EVENTS", "events"]) ?? [];
   const list = asArray(base).map((e, i): RegistryEvent | null => {
     const rec = isRecord(e) ? e : {};
     const id =
@@ -167,9 +133,7 @@ export function getEventsNext14Days(from: Date = new Date()): RegistryEvent[] {
       toNullableString(rec["start"]) ??
       "";
 
-    const title =
-      toStringOr(rec["title"], "") || "Event";
-
+    const title = toStringOr(rec["title"], "") || "Event";
     const zodiac = toNullableString(rec["zodiac"]);
     const description = toNullableString(rec["description"]);
     const type = toNullableString(rec["type"]);
@@ -178,15 +142,7 @@ export function getEventsNext14Days(from: Date = new Date()): RegistryEvent[] {
 
     if (!isISODate(start)) return null;
 
-    return {
-      id,
-      title,
-      startUTC: start,
-      zodiac,
-      description,
-      type,
-      tags,
-    };
+    return { id, title, startUTC: start, zodiac, description, type, tags };
   });
 
   return list.filter((x): x is RegistryEvent => x !== null).sort((a, b) => a.startUTC.localeCompare(b.startUTC));
@@ -195,13 +151,12 @@ export function getEventsNext14Days(from: Date = new Date()): RegistryEvent[] {
 /* ======================= THEMES / STILE ======================= */
 
 export function getThemes(): RegistryTheme[] {
-  // 1) typische Export-Varianten
+  // 1) Kandidaten-Keys (ohne `.default`)
   const candidates: unknown[] = [
-    (themesLib as unknown as Record<string, unknown>)["THEMES"],
-    (themesLib as unknown as Record<string, unknown>)["THEME_PRESETS"],
-    (themesLib as unknown as Record<string, unknown>)["PRESETS"],
-    (themesLib as unknown as Record<string, unknown>)["items"],
-    (themesLib as unknown as Record<string, unknown>)["default"],
+    (themesLib as Record<string, unknown>)["THEMES"],
+    (themesLib as Record<string, unknown>)["THEME_PRESETS"],
+    (themesLib as Record<string, unknown>)["PRESETS"],
+    (themesLib as Record<string, unknown>)["items"],
   ].filter(Boolean);
 
   let base: unknown[] = [];
@@ -216,15 +171,12 @@ export function getThemes(): RegistryTheme[] {
     }
   }
 
-  // 2) Fallback: Objekt mit Werten (z. B. {lena:{...}, paul:{...}})
-  if (base.length === 0 && isRecord(themesLib)) {
+  // 2) Fallback: Werte aus dem Modul (ohne .default)
+  if (base.length === 0) {
     const vals = objectValuesArray(themesLib);
-    if (vals.length && !Array.isArray(themesLib)) {
-      base = vals;
-    }
+    if (vals.length) base = vals;
   }
 
-  // 3) Wenn immer noch nichts → vorsichtige Defaults
   if (base.length === 0) {
     return [
       { id: "style-1", name: "Stil 1", previewCssUrl: null },
@@ -264,10 +216,14 @@ export function getFonts(): RegistryFont[] {
 
   let base: unknown[] = fromContent ?? fromThemes ?? [];
 
-  // Fallback: wenn in default ein Objekt mit .fonts liegt
-  const defaultObj = (contentLib as unknown as Record<string, unknown>)["default"];
-  if (base.length === 0 && isRecord(defaultObj) && Array.isArray(defaultObj["fonts"])) {
-    base = defaultObj["fonts"] as unknown[];
+  // Fallback: Werte aus contentLib (ohne `.default`)
+  if (base.length === 0) {
+    const vals = objectValuesArray(contentLib);
+    // falls ein Objekt mit `fonts` drinsteckt
+    const maybeFonts = vals.find((v) => isRecord(v) && Array.isArray(v["fonts"]));
+    if (maybeFonts && isRecord(maybeFonts)) {
+      base = (maybeFonts["fonts"] as unknown[]) ?? [];
+    }
   }
 
   const normalized = asArray(base).map((f, i): RegistryFont => {
@@ -313,10 +269,13 @@ export function getTextColors(): RegistryColor[] {
 
   let base: unknown[] = fromContent ?? fromThemes ?? [];
 
-  // Fallback: wenn in default ein Objekt mit .textColors liegt
-  const defaultObj = (contentLib as unknown as Record<string, unknown>)["default"];
-  if (base.length === 0 && isRecord(defaultObj) && Array.isArray(defaultObj["textColors"])) {
-    base = defaultObj["textColors"] as unknown[];
+  // Fallback: Werte aus contentLib (ohne `.default`)
+  if (base.length === 0) {
+    const vals = objectValuesArray(contentLib);
+    const maybe = vals.find((v) => isRecord(v) && Array.isArray(v["textColors"]));
+    if (maybe && isRecord(maybe)) {
+      base = (maybe["textColors"] as unknown[]) ?? [];
+    }
   }
 
   const normalized = asArray(base).map((c, i): RegistryColor => {
