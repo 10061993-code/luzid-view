@@ -19,7 +19,11 @@ import type {
 
 // <<< Defaults >>>
 const DEFAULT_CONTENT: ContentConfig = { event: "new-moon", tone: "warm", length: "short" };
-const DEFAULT_THEME: ThemeConfig = { font_family: "Inter", font_weight_scale: "normal", font_color: "#111111" };
+const DEFAULT_THEME: ThemeConfig = {
+  font_family: "Inter",
+  font_weight_scale: "normal",
+  font_color: "#111111",
+};
 const DEFAULT_BIRTH: BirthInput = { name: "", city: "", date: "", time: "12:00", unknown_time: false };
 
 export default function KonfiguratorPage() {
@@ -27,13 +31,13 @@ export default function KonfiguratorPage() {
   const [content, setContent] = useState<ContentConfig>(DEFAULT_CONTENT);
   const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
   const [birth, setBirth] = useState<BirthInput>(DEFAULT_BIRTH);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [text, setText] = useState<string>("");
   const [error, setError] = useState<string>("");
 
-  const canGenerate = useMemo(() => !!content.event, [content.event]);
+  const canGenerate = useMemo<boolean>(() => !!content.event, [content.event]);
 
-  async function handleGenerate() {
+  async function handleGenerate(): Promise<void> {
     setLoading(true);
     setError("");
     try {
@@ -64,9 +68,10 @@ export default function KonfiguratorPage() {
       });
       if (!res.ok) throw new Error(`Generator responded ${res.status}`);
       const data = (await res.json()) as { text?: string };
-      setText(data?.text || "Kein Text erhalten.");
-    } catch (e: any) {
-      setError(e?.message || "Fehler bei der Generierung.");
+      setText(data?.text ?? "Kein Text erhalten.");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Fehler bei der Generierung.";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -79,8 +84,8 @@ export default function KonfiguratorPage() {
     <main className="mx-auto max-w-7xl px-4 py-8">
       <h1 className="text-2xl font-semibold mb-2">Luzid – Events Konfigurator</h1>
       <p className="text-sm text-gray-500 mb-6">
-        Eine Seite, zwei Bereiche: <strong>Content</strong> (wirkt auf GPT) & <strong>Theme</strong> (wirkt auf CSS).
-        Live-Preview rechts.
+        Eine Seite, zwei Bereiche: <strong>Content</strong> (wirkt auf GPT) &{" "}
+        <strong>Theme</strong> (wirkt auf CSS). Live-Preview rechts.
       </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -261,43 +266,24 @@ export default function KonfiguratorPage() {
               </div>
             </div>
 
-            {/* Font Color */}
+            {/* Color */}
             <div className="flex items-center gap-3 mb-1">
-              <label className="text-sm font-medium w-28">Farbe Typo</label>
-              <div className="flex gap-2 flex-wrap">
+              <label className="text-sm font-medium w-28">Textfarbe</label>
+              <div className="flex flex-wrap gap-2">
                 {COLOR_TOKENS_DARK.map((hex) => (
                   <button
                     key={hex}
                     onClick={() => setTheme((t) => ({ ...t, font_color: hex }))}
-                    className={`w-8 h-8 rounded-full border ${
-                      theme.font_color === hex ? "border-black" : "border-gray-300"
-                    }`}
-                    style={{ background: hex }}
+                    className="px-3 py-1.5 rounded-full border text-sm"
+                    style={{
+                      borderColor: theme.font_color === hex ? "#000" : "#d1d5db",
+                      color: hex,
+                    }}
                     title={hex}
-                  />
+                  >
+                    {hex}
+                  </button>
                 ))}
-              </div>
-            </div>
-
-            {/* Optional extras */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">Background (optional)</label>
-                <input
-                  className="w-full border rounded-md px-2 py-1"
-                  placeholder="#FFFFFF oder CSS var()"
-                  value={theme.bg_color || ""}
-                  onChange={(e) => setTheme((t) => ({ ...t, bg_color: e.target.value || undefined }))}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Accent (optional)</label>
-                <input
-                  className="w-full border rounded-md px-2 py-1"
-                  placeholder="#EAB308"
-                  value={theme.accent_color || ""}
-                  onChange={(e) => setTheme((t) => ({ ...t, accent_color: e.target.value || undefined }))}
-                />
               </div>
             </div>
           </div>
@@ -307,55 +293,33 @@ export default function KonfiguratorPage() {
             <button
               onClick={handleGenerate}
               disabled={!canGenerate || loading}
-              className="px-4 py-2 rounded-xl border bg-black text-white disabled:opacity-60"
+              className={`px-4 py-2 rounded-xl text-white font-semibold ${
+                !canGenerate || loading ? "bg-gray-300 cursor-not-allowed" : "bg-black hover:bg-gray-900"
+              }`}
+              title={!canGenerate ? "Bitte ein Event wählen" : "Generieren"}
             >
-              {loading ? "Generiere…" : "Vorschau anzeigen"}
+              {loading ? "Generiere…" : "Generieren"}
             </button>
+
             {error && <span className="text-sm text-red-600">{error}</span>}
           </div>
         </section>
 
         {/* Preview */}
         <aside className="lg:col-span-1">
-          <div className="rounded-2xl border p-5 min-h-[520px]" style={previewStyle as any}>
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <div className="text-xs uppercase tracking-wider opacity-60">
-                  {EVENT_CATALOG[content.event].title}
-                </div>
-                <h3 className="text-xl font-semibold mt-1">Preview</h3>
-              </div>
-              {theme.accent_color && (
-                <span className="inline-block w-3 h-3 rounded-full" style={{ background: theme.accent_color }} />
-              )}
-            </div>
-
-            <p className="mt-4 text-xs opacity-70">
-              {EVENT_CATALOG[content.event].leitfrage} · {EVENT_CATALOG[content.event].zeitlicherKontext}
-            </p>
-
-            <div className="mt-4 whitespace-pre-wrap leading-relaxed text-[15px]">
-              {text
-                ? text
-                : "Generische Vorschau: Wir zeigen hier einen Beispieltext im gewählten Ton & Länge. Personalisierte Inhalte erscheinen nach Klick auf „Vorschau anzeigen“."}
-            </div>
-
-            <div className="mt-6 border-t pt-3 text-xs opacity-70">
-              <div>
-                <strong>Ton:</strong> {content.tone} · <strong>Länge:</strong> {LENGTH_PRESETS[content.length].label}
-              </div>
-              <div className="mt-1">
-                <strong>Typo:</strong> {theme.font_family} · <strong>Farbe:</strong> {theme.font_color}
-                {theme.bg_color ? ` · BG: ${theme.bg_color}` : ""} {theme.accent_color ? ` · Accent: ${theme.accent_color}` : ""}
-              </div>
-            </div>
+          <div className="rounded-2xl border p-4" style={previewStyle as React.CSSProperties}>
+            <div className="text-xs text-gray-500 mb-2">Live-Preview</div>
+            <article className="prose prose-sm max-w-none">
+              <h3 className="mb-2">
+                {EVENT_CATALOG[content.event]?.title ?? "Vorschau"} • {content.tone} •{" "}
+                {LENGTH_PRESETS[content.length].label}
+              </h3>
+              <p className="whitespace-pre-wrap leading-relaxed">
+                {text || "Noch kein Text generiert. Wähle Event/Tone/Länge und klicke auf „Generieren“."}
+              </p>
+            </article>
           </div>
         </aside>
-      </div>
-
-      <div className="mt-6 text-xs text-gray-500">
-        Hinweis: Theme-Einstellungen gehen <em>nicht</em> an GPT. Der Request an <code>/api/generate</code> enthält nur
-        Content-Parameter (Event, Tone, Length, optional Focus & Birth).
       </div>
     </main>
   );
