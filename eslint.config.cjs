@@ -1,51 +1,63 @@
-// eslint.config.cjs — Flat Config (CommonJS) für ESLint 9 + Next 15 (ohne Rushstack)
+// eslint.config.cjs — Flat Config (CommonJS) für ESLint 9 + Next 15 + Prettier
 const js = require("@eslint/js");
 const tseslint = require("typescript-eslint");
 const next = require("eslint-config-next");
+const reactHooks = require("eslint-plugin-react-hooks");
+const prettier = require("eslint-config-prettier");
 
 /** @type {import("eslint").Linter.FlatConfig[]} */
 module.exports = [
-  // 0) Globale Ignorierliste
+  // Globale Ignorierliste
   {
-    ignores: [
-      "node_modules/**",
-      ".next/**",
-      "dist/**",
-      "next-env.d.ts", // auto-generiert
-    ],
+    ignores: ["node_modules/**", ".next/**", "dist/**", "next-env.d.ts"],
   },
 
-  // 1) Basis JS-Regeln
+  // Baseline-Regeln
   js.configs.recommended,
-
-  // 2) TypeScript-Empfehlungen (ohne type-check für Speed)
   ...tseslint.configs.recommended,
+  ...(next?.configs?.recommended ? next.configs.recommended : []),
 
-  // 3) Next.js-Empfehlungen
-  ...(next && next.configs && next.configs.recommended ? next.configs.recommended : []),
-
-  // 4) Gezielte temporäre Ausnahmen — bis wir diese Dateien sauber typisieren
+  // React Hooks
   {
-    files: ["lib/registry.ts", "app/konfigurator/page.tsx"],
+    files: ["**/*.{js,jsx,ts,tsx}"],
+    plugins: { "react-hooks": reactHooks },
     rules: {
-      "@typescript-eslint/no-explicit-any": "off",
-    },
-  },
-
-  // 5) Kleine Hausregeln/Fixes
-  {
-    files: ["lib/storage.ts"],
-    rules: {
-      "no-empty": ["error", { allowEmptyCatch: true }],
-    },
-  },
-
-  // 6) PdfButton: exhaustives-deps nur hier ausschalten (statt Header-Kommentar)
-  {
-    files: ["app/components/PdfButton.tsx"],
-    rules: {
+      "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "off",
     },
   },
+
+  // Node Globals für CJS
+  {
+    files: ["**/*.cjs"],
+    languageOptions: {
+      globals: {
+        require: "readonly",
+        module: "readonly",
+        __dirname: "readonly",
+        process: "readonly",
+      },
+      sourceType: "commonjs",
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+      "no-undef": "off",
+    },
+  },
+
+  // Temporäre Ausnahmen (bis getypte Dateien fertig sind)
+  {
+    files: ["lib/registry.ts", "app/konfigurator/page.tsx"],
+    rules: { "@typescript-eslint/no-explicit-any": "off" },
+  },
+
+  // Kleine Hausregeln
+  {
+    files: ["lib/storage.ts"],
+    rules: { "no-empty": ["error", { allowEmptyCatch: true }] },
+  },
+
+  // 🔧 Prettier — deaktiviert ESLint-Formatierungsregeln, nutzt Prettier-Stil
+  prettier,
 ];
 
