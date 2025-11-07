@@ -9,6 +9,8 @@ app.get("/healthz", (req, res) => {
 
 app.use("/api", generateDrop);
 
+app.use("/api", metricsRouter);
+
 // 404
 app.use((req, res) => res.status(404).json({ error: "Not Found" }));
 
