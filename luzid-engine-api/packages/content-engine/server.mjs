@@ -1,14 +1,15 @@
 import express from "express";
-import { router as generateDrop } from "../routes/generate_drop.mjs";
+import { router as generateDrop } from "./routes/generate_drop.mjs";
 
 const app = express();
 
 app.get("/healthz", (req, res) => {
-  res.json({ ok: true, ts: Date.now() });
+  res.json({ ok: true, ts: Date.now(), server: "content-engine" });
 });
 
 app.use("/api", generateDrop);
 
+// 404
 app.use((req, res) => res.status(404).json({ error: "Not Found" }));
 
 const PORT = process.env.PORT || 8787;

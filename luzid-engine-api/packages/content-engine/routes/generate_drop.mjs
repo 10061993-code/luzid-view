@@ -1,7 +1,5 @@
-------------------------------------------------------------
 import express from "express";
 import { runPipeline } from "../pipeline.mjs";
-
 export const router = express.Router();
 
 router.post("/generate/drop", express.json(), async (req, res) => {
@@ -14,5 +12,3 @@ router.post("/generate/drop", express.json(), async (req, res) => {
     res.status(500).json({ error: String(err?.message || err) });
   }
 });
-------------------------------------------------------------
-

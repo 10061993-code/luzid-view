@@ -1,0 +1,23 @@
+// server.mjs (Entry) – lädt .env nur in Development
+import http from 'http';
+
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    const dotenv = await import('dotenv');
+    dotenv.config(); // lädt ./.env wenn vorhanden – keine Pfadangabe nötig
+    console.log('[dotenv] local .env loaded for development');
+  } catch {
+    // still ok
+  }
+}
+
+// Beispiel: einfacher Healthcheck-Server
+const server = http.createServer((_, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ ok: true, ts: Date.now() }));
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`server listening on :${PORT}`);
+});
