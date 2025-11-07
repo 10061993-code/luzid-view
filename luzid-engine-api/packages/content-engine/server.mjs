@@ -1,5 +1,6 @@
 import express from "express";
 import { router as generateDrop } from "./routes/generate_drop.mjs";
+import { router as metricsRouter } from "./routes/metrics.mjs";
 
 const app = express();
 
@@ -8,7 +9,6 @@ app.get("/healthz", (req, res) => {
 });
 
 app.use("/api", generateDrop);
-
 app.use("/api", metricsRouter);
 
 // 404
