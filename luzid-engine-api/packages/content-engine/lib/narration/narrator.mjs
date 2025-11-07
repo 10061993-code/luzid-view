@@ -1,4 +1,4 @@
-import atoms from "./interpretation_data.json" assert { type: "json" };
+import atoms from "./interpretation_data.json" with { type: "json" };
 
 const CREATOR_STYLES = {
   lena: {
