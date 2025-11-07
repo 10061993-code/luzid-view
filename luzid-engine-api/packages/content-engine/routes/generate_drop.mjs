@@ -6,7 +6,8 @@ export const router = express.Router();
 
 router.post("/generate/drop", express.json(), async (req, res) => {
   try {
-    const ip = req.headers["x-forwarded-for"]?.toString().split(",")[0].trim() || req.socket.remoteAddress || "ip:unknown";
+    const ip = req.headers["x-forwarded-for"]?.toString().split(",")[0].trim()
+      || req.socket.remoteAddress || "ip:unknown";
     const rl = rateLimit(`drop:${ip}`, { capacity: 30, refill: 30, windowMs: 60_000 });
     if (!rl.ok) return res.status(429).json({ error: "rate_limited", retryAfterMs: rl.retryAfterMs });
 
