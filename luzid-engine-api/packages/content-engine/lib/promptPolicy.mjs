@@ -1,63 +1,131 @@
-// v3.5 — line + sentence + paragraph purge; enforce exact canonical CTA
-function dedupeCTA(text, styleCta) {
-  const canonical = canonicalCTA(styleCta);
+k// packages/content-engine/lib/promptPolicy.mjs
+// v3.6 — kill ALL imperative fragments (any position), append single canonical CTA, strict closing
 
-  // Regex-Bausteine aus v3.4
-  const CTA_VERBS_GROUP = "(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)";
-  const RX_BULLET = new RegExp(String.raw`(^|\n)\s*-\s*${CTA_VERBS_GROUP}\b[^\n]*`, "gim");
-  const RX_INLINE_TO_END = new RegExp(String.raw`${CTA_VERBS_GROUP}\b[^\.!\?\n]*[\.!\?]?`, "gim");
-  const RX_FRAGMENT = new RegExp(String.raw`(^|\n)\s*(?:-\s*)?${CTA_VERBS_GROUP}\b[^\n]*`, "gim");
+export function applyPolicy(text, { creatorHandle, style }) {
+  let t = (text || "").trim();
+  t = normalizeWhitespace(t);
+  t = stripHallucinatedHeaders(t);
+  t = limitEmojis(t, style?.emoji ?? "none");
+  t = dedupeCTA(t);                 // exakt 1 CTA, immer kanonisch
+  t = enforceClosing(t, creatorHandle, style); // striktes Closing je Creator
+  return t;
+}
 
-  // 0) Arbeitskopie
-  let body = String(text ?? "");
+/* ---------------------- Normalisierung ---------------------- */
 
-  // 1) Bullet-CTAs raus
-  body = body.replace(RX_BULLET, "$1");
+function normalizeWhitespace(t) {
+  return t.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
 
-  // 2) Inline-Imperative bis Satzende raus
-  body = body.replace(RX_INLINE_TO_END, "");
+function stripHallucinatedHeaders(t) {
+  return t.replace(/^(?:#+\s.*\n+)+/g, "");
+}
 
-  // 3) Rest-Fragmente (ohne Endzeichen) raus
-  body = body.replace(RX_FRAGMENT, "$1");
+function limitEmojis(t, mode) {
+  if (mode === "none") return t.replace(/\p{Extended_Pictographic}/gu, "");
+  return t;
+}
 
-  // 4) Satzweise säubern (Fallback)
-  body = body
-    .replace(/([.!?])\s+(?=[A-ZÄÖÜ])/g, "$1\n")
-    .split("\n")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-    .filter((s) => !new RegExp(CTA_VERBS_GROUP, "i").test(s))
-    .join("\n");
+/* ---------------------- CTA-Entfernung ---------------------- */
+/**
+ * Strategie v3.6 (brute force, aber sicher):
+ *  1) Paragraphweise prüfen: enthält der Absatz ein Imperativ-Verb? → kompletten Absatz löschen.
+ *  2) Danach global ALLE Imperativ-Fragmente (Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache ...)
+ *     samt folgendem Text bis zum Satzende ODER Zeilenende entfernen – egal wo sie stehen.
+ *  3) Reste ohne Punkt/Endzeichen ebenfalls entfernen.
+ *  4) Kanonische CTA anhängen. Vorher alle evtl. vorhandenen Varianten dieser Zeile entfernen.
+ */
 
-  // 5) **NEU**: Absatz-Purge — jeden Paragraphen mit Imperativ vollständig entfernen
-  body = body
+const VERBS = "(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)";
+
+// 1) Absatz mit Imperativ komplett verwerfen
+function purgeImperativeParagraphs(raw) {
+  return raw
     .split(/\n{2,}/)
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
-    .filter((p) => !new RegExp(CTA_VERBS_GROUP, "i").test(p))
+    .filter((p) => !new RegExp(VERBS, "i").test(p))
     .join("\n\n");
+}
 
-  // 6) Safety: evtl. verbliebene „Notiere/Schreibe/Setze …“-Fragmente ohne Punkt komplett killen
-  const RX_ANY_RESIDUAL = new RegExp(
-    String.raw`(^|\n)\s*(?:-\s*)?${CTA_VERBS_GROUP}\b[^\n]*`,
-    "gim"
-  );
-  body = body.replace(RX_ANY_RESIDUAL, "$1");
+// 2) Inline-Imperativ (vom Verb bis Satzende ODER Zeilenende) überall löschen
+const RX_INLINE_TO_SENT_END = new RegExp(
+  String.raw`${VERBS}\b[^\.!\?\n]*[\.!\?]?`, // bis zum nächsten Satzzeichen, optional
+  "gim"
+);
 
-  // 7) Glätten
+// 3) Restfragmente ohne Endzeichen löschen (bis zum Zeilenende)
+const RX_INLINE_TO_EOL = new RegExp(
+  String.raw`${VERBS}\b[^\n]*`,
+  "gim"
+);
+
+// 4) Bullets wie "- Schreibe ..." entfernen
+const RX_BULLET = new RegExp(
+  String.raw`(^|\n)\s*-\s*${VERBS}\b[^\n]*`,
+  "gim"
+);
+
+function canonicalCTA() {
+  return "Notiere dir heute einen einzigen, leichten Schritt.";
+}
+
+function dedupeCTA(text) {
+  let body = String(text || "");
+
+  // Absatzweise hart löschen
+  body = purgeImperativeParagraphs(body);
+
+  // Bullets raus
+  body = body.replace(RX_BULLET, "$1");
+
+  // Inline-Imperativ bis Satzende
+  body = body.replace(RX_INLINE_TO_SENT_END, "");
+
+  // Inline-Imperativ bis Zeilenende (Reste ohne Punkt)
+  body = body.replace(RX_INLINE_TO_EOL, "");
+
+  // Aufräumen: Mehrfach-Leerzeilen / Spacing
   body = body
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\s+([,.!?:;])/g, "$1")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  // 8) **Exakt** eine kanonische CTA anhängen
-  //    (vorher ALLE Varianten der kanonischen Zeile inkl. Anhängsel entfernen)
-  const RX_CANONICAL_VARIANTS = /Notiere dir heute einen einzigen, leichten Schritt[^.\n!?]*[.!?]?/gi;
-  body = body.replace(RX_CANONICAL_VARIANTS, "").replace(/\n{3,}/g, "\n\n").trim();
+  // Alle evtl. vorhandenen Varianten der kanonischen CTA vorher entfernen
+  const RX_CANON = /Notiere dir heute einen einzigen, leichten Schritt[^.\n!?]*[.!?]?/gi;
+  body = body.replace(RX_CANON, "").replace(/\n{3,}/g, "\n\n").trim();
 
-  body = body.length ? `${body}\n\n${canonical}` : canonical;
-
+  // Exakt EINE kanonische CTA ans Ende
+  body = body.length ? `${body}\n\n${canonicalCTA()}` : canonicalCTA();
   return body.trim();
+}
+
+/* ---------------------- Closing-Logik ---------------------- */
+
+function enforceClosing(t, creatorHandle, style = {}) {
+  // modellgenerierte Grußformeln am Ende entfernen
+  const signoffRx =
+    /(\n\s*(Alles Liebe|Liebe Grüße|Herzlichst|Herzlich|LG|xx|–)\s*[—–-]?\s*[A-Za-zÄÖÜäöüß✨ ]{0,40},?\s*)$/i;
+  let body = t.replace(signoffRx, "").trim();
+
+  const strictByHandle = {
+    lena: "xx – Lena",
+    paul: "– Paul",
+    yasmin: "✨ Yasmin",
+  };
+
+  const creatorName = displayNameFromHandle(creatorHandle);
+  const desired =
+    style?.closing_style && /{creator}/.test(style.closing_style)
+      ? style.closing_style.replace("{creator}", creatorName)
+      : strictByHandle[creatorHandle] ?? `– ${creatorName}`;
+
+  body = body.replace(/\s+$/, "");
+  return `${body}\n\n${desired}`;
+}
+
+function displayNameFromHandle(handle = "") {
+  return handle ? handle.charAt(0).toUpperCase() + handle.slice(1) : "Creator";
 }
 
