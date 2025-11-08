@@ -11,10 +11,10 @@ app.use(express.json({ limit: "1mb" }));
 // Health
 app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
 
-// Content routes (weekly|micro)
+// Content routes: /api/content/:type (weekly|micro)
 app.use(contentRouter);
 
-// Fallback
+// Global error handler
 app.use((err, _req, res, _next) => {
   console.error("unhandled:", err);
   res.status(500).json({ error: "internal_error" });
