@@ -1,5 +1,5 @@
 // packages/content-engine/lib/promptPolicy.mjs
-// v3.2 — line-first + sentence-level CTA purge (imperatives), single canonical CTA, strict closing
+// v3.3 — aggressive inline CTA scrub + single canonical CTA + strict closing
 
 export function applyPolicy(text, { creatorHandle, style }) {
   let t = (text || "").trim();
@@ -28,78 +28,54 @@ function limitEmojis(t, mode) {
 
 /* ---------------------- CTA-Entfernung ---------------------- */
 
-const CTA_VERBS = /(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b/i;
+/**
+ * Wir werten als CTA jeden Imperativ mit typischen Verben – auch inline mitten im Absatz,
+ * mit/ohne "heute", mit/ohne Satzende, als Bullet oder als separater Satz.
+ */
+const CTA_VERBS = "(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)";
+const CTA_INLINE = new RegExp(
+  // Kante: Satz-/Zeilengrenze oder Anfang → optional Bullet/Whitespace → Imperativverb → bis zum nächsten Satzende oder Zeilenende weg
+  String.raw`(^|[\n\.!\?]\s*)(?:-\s*)?${CTA_VERBS}\b[^\.!\?\n]*[\.!\?]?`,
+  "gim"
+);
+const CTA_BULLET_LINE = new RegExp(
+  String.raw`(^|\n)\s*-\s*${CTA_VERBS}\b[^\n]*`,
+  "gim"
+);
 
-/** 1) Entferne jede *Zeile*, die Imperativ enthält (auch Bullets) */
-function removeImperativeLines(raw) {
-  const lines = raw.split("\n");
-  const kept = [];
-  for (let line of lines) {
-    const l = (line || "").trim();
-    if (!l) { kept.push(line); continue; }
-    // Bullet mit Imperativ oder Zeile mit Imperativ → verwerfen
-    if (/^\s*-\s*/.test(l) && CTA_VERBS.test(l)) continue;
-    if (CTA_VERBS.test(l)) continue;
-    kept.push(line);
-  }
-  return kept.join("\n").replace(/\n{3,}/g, "\n\n");
-}
+/**
+ * Entfernt ALLE CTAs (inline + bullets + satzweise) kompromisslos
+ * und hängt genau EINE kanonische CTA an.
+ */
+function dedupeCTA(text, styleCta) {
+  const canonical = canonicalCTA(styleCta);
 
-/** 2) Entferne jeden *Satz* (bis . ! ?), der Imperativ enthält */
-function removeImperativeSentences(raw) {
-  const SENTENCE = /[^.!?]*[.!?]/g; // grob: bis zum Satzzeichen
-  let out = "";
-  let m;
-  while ((m = SENTENCE.exec(raw)) !== null) {
-    const sentence = m[0].trim();
-    if (!sentence) continue;
-    if (CTA_VERBS.test(sentence)) continue; // CTA-Satz verwerfen
-    out += (out ? "\n" : "") + sentence;
-  }
-  // Rest ohne Satzzeichen
-  const tail = raw.slice(SENTENCE.lastIndex).trim();
-  if (tail && !CTA_VERBS.test(tail)) out += (out ? "\n" : "") + tail;
-  return out;
+  let body = text;
+
+  // 1) Zuerst Bullet-CTAs hart entfernen (ganze Zeilen)
+  body = body.replace(CTA_BULLET_LINE, "$1").replace(/\n{3,}/g, "\n\n");
+
+  // 2) Dann *inline* Imperativ-Sequenzen inklusive folgendem Satzende entfernen
+  body = body.replace(CTA_INLINE, "$1").replace(/\n{3,}/g, "\n\n");
+
+  // 3) Rest glätten
+  body = body.replace(/\s+$/g, "").replace(/\n{3,}/g, "\n\n").trim();
+
+  // 4) Sicherheitsnetz: falls doch noch Imperativfragmente ohne Punkt stehen
+  const CTA_FRAGMENTS = new RegExp(
+    String.raw`(^|\n)\s*(?:-\s*)?${CTA_VERBS}\b[^\n]*`,
+    "gim"
+  );
+  body = body.replace(CTA_FRAGMENTS, "$1").replace(/\n{3,}/g, "\n\n").trim();
+
+  // 5) Exakt EINE kanonische CTA anhängen
+  body = body.length ? `${body}\n\n${canonical}` : canonical;
+
+  return body.trim();
 }
 
 function canonicalCTA() {
   return "Notiere dir heute einen einzigen, leichten Schritt.";
-}
-
-/**
- * Endgültige Reihenfolge:
- *  - zeilenweise Imperativ-Zeilen entfernen
- *  - satzweise Imperativ-Sätze entfernen
- *  - globales Safety-Net (Fragmente/ohne Punkt)
- *  - genau 1 kanonische CTA anhängen
- */
-function dedupeCTA(text, styleCta) {
-  // 1) Lines-first purge
-  let body = removeImperativeLines(text);
-
-  // 2) Sentence-level purge
-  body = removeImperativeSentences(body);
-
-  // 3) Safety-Net: auch Imperativ-Fragmente/Restzeilen restlos entfernen
-  const CTA_GLOBAL = new RegExp(
-    [
-      // Bullets mit Imperativ
-      /(^|\n)\s*-\s*(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b.*($|\n)/.source,
-      // generische Imperativ-Zeilen (auch ohne Punkt)
-      /(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b.*$/.source,
-      // frühere fest verdrahtete Formulierungen
-      /Notiere dir heute einen einzigen, leichten Schritt\.?/.source,
-      /Setze heute einen kleinen, konkreten Schritt\.?/.source,
-    ].join("|"),
-    "gim"
-  );
-  body = body.replace(CTA_GLOBAL, "").replace(/\n{3,}/g, "\n\n").trim();
-
-  // 4) Exakt EINE kanonische CTA anhängen
-  body = body.length ? body + "\n\n" + canonicalCTA(styleCta) : canonicalCTA(styleCta);
-
-  // Glätten & zurück
-  return body.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /* ---------------------- Closing-Logik ---------------------- */
