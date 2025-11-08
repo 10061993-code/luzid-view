@@ -1,13 +1,13 @@
 // packages/content-engine/lib/promptPolicy.mjs
-// v3.1 — Sentence-level CTA purge (imperatives), single canonical CTA, strict closing
+// v3.2 — line-first + sentence-level CTA purge (imperatives), single canonical CTA, strict closing
 
 export function applyPolicy(text, { creatorHandle, style }) {
   let t = (text || "").trim();
   t = normalizeWhitespace(t);
   t = stripHallucinatedHeaders(t);
   t = limitEmojis(t, style?.emoji ?? "none");
-  t = dedupeCTA(t, style?.cta_style ?? "crisp");   // → exakt 1 CTA, immer kanonisch
-  t = enforceClosing(t, creatorHandle, style);     // → striktes Closing je Creator
+  t = dedupeCTA(t, style?.cta_style ?? "crisp");   // exakt 1 CTA, immer kanonisch
+  t = enforceClosing(t, creatorHandle, style);     // striktes Closing je Creator
   return t;
 }
 
@@ -26,13 +26,28 @@ function limitEmojis(t, mode) {
   return t;
 }
 
-/* ---------------------- CTA-Entfernung (Satz-basiert) ---------------------- */
-// Imperativ-Verben, die wir als CTA werten:
+/* ---------------------- CTA-Entfernung ---------------------- */
+
 const CTA_VERBS = /(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b/i;
 
-// 1) Entfernt jeden *Satz* (bis . ! ?), der ein Imperativ-Verb enthält
+/** 1) Entferne jede *Zeile*, die Imperativ enthält (auch Bullets) */
+function removeImperativeLines(raw) {
+  const lines = raw.split("\n");
+  const kept = [];
+  for (let line of lines) {
+    const l = (line || "").trim();
+    if (!l) { kept.push(line); continue; }
+    // Bullet mit Imperativ oder Zeile mit Imperativ → verwerfen
+    if (/^\s*-\s*/.test(l) && CTA_VERBS.test(l)) continue;
+    if (CTA_VERBS.test(l)) continue;
+    kept.push(line);
+  }
+  return kept.join("\n").replace(/\n{3,}/g, "\n\n");
+}
+
+/** 2) Entferne jeden *Satz* (bis . ! ?), der Imperativ enthält */
 function removeImperativeSentences(raw) {
-  const SENTENCE = /[^.!?]*[.!?]/g; // grobe Satzgrenzen
+  const SENTENCE = /[^.!?]*[.!?]/g; // grob: bis zum Satzzeichen
   let out = "";
   let m;
   while ((m = SENTENCE.exec(raw)) !== null) {
@@ -41,16 +56,10 @@ function removeImperativeSentences(raw) {
     if (CTA_VERBS.test(sentence)) continue; // CTA-Satz verwerfen
     out += (out ? "\n" : "") + sentence;
   }
-  // Rest ohne abschließendes Satzzeichen (falls vorhanden)
+  // Rest ohne Satzzeichen
   const tail = raw.slice(SENTENCE.lastIndex).trim();
   if (tail && !CTA_VERBS.test(tail)) out += (out ? "\n" : "") + tail;
   return out;
-}
-
-// 2) Entfernt Zeilen mit Bullets + Imperativ
-function removeBulletImperatives(raw) {
-  const BULLET_IMP = /(^|\n)\s*-\s*(?:Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b[^\n]*/gim;
-  return raw.replace(BULLET_IMP, "").replace(/\n{3,}/g, "\n\n");
 }
 
 function canonicalCTA() {
@@ -58,30 +67,27 @@ function canonicalCTA() {
 }
 
 /**
- * Endgültige CTA-Strategie:
- *  - zuerst satzbasiert ALLE Imperativ-Sätze löschen
- *  - dann bullet-basierte Imperative löschen
- *  - Body glätten
- *  - am Ende genau EINE kanonische CTA anhängen
+ * Endgültige Reihenfolge:
+ *  - zeilenweise Imperativ-Zeilen entfernen
+ *  - satzweise Imperativ-Sätze entfernen
+ *  - globales Safety-Net (Fragmente/ohne Punkt)
+ *  - genau 1 kanonische CTA anhängen
  */
 function dedupeCTA(text, styleCta) {
-  let body = text;
+  // 1) Lines-first purge
+  let body = removeImperativeLines(text);
 
-  // global satzweise alle Imperativ-Sätze raus (inkl. Kommas, Nebensätze)
+  // 2) Sentence-level purge
   body = removeImperativeSentences(body);
 
-  // danach Bullet-Imperative restlos entfernen
-  body = removeBulletImperatives(body);
-
-  // Absätze glätten
-  body = body.replace(/\n{3,}/g, "\n\n").trim();
-
-  // Fallback: falls irgendwo Imperativ-Fragmente ohne Satzende verbleiben, hart weg
+  // 3) Safety-Net: auch Imperativ-Fragmente/Restzeilen restlos entfernen
   const CTA_GLOBAL = new RegExp(
     [
-      // generische Imperativ-Zeile
-      /(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b[^\n.!?]*$/ .source,
-      // bekannte früherer Zeilen
+      // Bullets mit Imperativ
+      /(^|\n)\s*-\s*(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b.*($|\n)/.source,
+      // generische Imperativ-Zeilen (auch ohne Punkt)
+      /(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b.*$/.source,
+      // frühere fest verdrahtete Formulierungen
       /Notiere dir heute einen einzigen, leichten Schritt\.?/.source,
       /Setze heute einen kleinen, konkreten Schritt\.?/.source,
     ].join("|"),
@@ -89,9 +95,11 @@ function dedupeCTA(text, styleCta) {
   );
   body = body.replace(CTA_GLOBAL, "").replace(/\n{3,}/g, "\n\n").trim();
 
-  // exakt EINE kanonische CTA anhängen
+  // 4) Exakt EINE kanonische CTA anhängen
   body = body.length ? body + "\n\n" + canonicalCTA(styleCta) : canonicalCTA(styleCta);
-  return body.trim();
+
+  // Glätten & zurück
+  return body.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /* ---------------------- Closing-Logik ---------------------- */
