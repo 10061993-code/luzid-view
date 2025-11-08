@@ -1,0 +1,48 @@
+name: Policy Check (CTA/Closing)
+
+on:
+  push:
+    branches: [ main, master, develop, chore/**, feature/** ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch: {}
+
+jobs:
+  policy-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Install nur im Content-Engine-Package (schneller, sauberer)
+      - name: Install (content-engine)
+        working-directory: ./packages/content-engine
+        run: |
+          npm ci
+
+      # (Optional) Root-Install, falls andere Skripte/Types benötigt werden
+      # - name: Install (root)
+      #   run: npm ci
+
+      - name: Run snapshot guard (CTA/Closing Policy)
+        working-directory: ./packages/content-engine
+        run: |
+          npm run snapshot
+
+      # Artefakt sichern, wenn der Guard fehlschlägt (Debug erleichtern)
+      - name: Upload snapshot failures (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot_failures
+          path: |
+            packages/content-engine/snapshot_failures.json
+          if-no-files-found: ignore
+
