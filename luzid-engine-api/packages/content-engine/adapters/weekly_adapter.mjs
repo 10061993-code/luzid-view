@@ -20,15 +20,5 @@ export async function buildWeeklyContext(input) {
     ? "Notiere heute 1 Mini-Schritt, den du sofort gehen kannst."
     : "Schreibe dir heute einen Mini-Schritt auf, der leicht fällt.";
 
-  const closing = (atoms.closing || "xx – {creator}").replace("{creator}", creator);
-
-  return {
-    creator, style,
-    phase: "exploration",
-    context: { audience: input.audience || "Gen Z, reflektiv" },
-    transits: mockTransits(event),
-    cta,
-    instructions: atoms.lines.join(" "),
-    closing
-  };
-}
+  const display = creator.charAt(0).toUpperCase()+creator.slice(1);
+  const closing = (atoms.closing || "xx – {creator}").replace("{creator}", display);
