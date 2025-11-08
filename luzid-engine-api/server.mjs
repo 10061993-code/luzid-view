@@ -1,7 +1,6 @@
 // luzid-engine-api/server.mjs
 // Root backend (port 8787) — definitive /api/content/:type Implementierung.
-// Garantiert: Pipeline + promptPolicy vor jeder Response. Kein Legacy-Fallthrough.
-
+// First-match: Diese Route steht VOR allen anderen (kein Legacy-Fallthrough).
 import express from "express";
 import cors from "cors";
 import { z } from "zod";
@@ -12,15 +11,16 @@ import { fetchCreatorStyle } from "./packages/content-engine/services/creators.m
 
 const app = express();
 
+// Nur notwendige Middlewares vor der Route
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-// Health (bestehend lassen für Monitoring)
+// ===== Health (unverändert für Monitoring) =====
 app.get("/healthz", (_req, res) => {
   res.json({ ok: true, env: "backend", port: process.env.PORT ?? "8787" });
 });
 
-// ===== Definitive Weekly/Micro-Route (überschreibt jegliche Legacy-Handler) =====
+// ===== DEFINITIVE WEEKLY/MICRO ROUTE (steht VOR allen anderen!) =====
 const PayloadSchema = z.object({
   creator: z.string().min(1),
   week: z.string().optional(),
@@ -33,32 +33,29 @@ const PayloadSchema = z.object({
 app.post("/api/content/:type", async (req, res) => {
   try {
     const type = String(req.params.type || "weekly");
-    const base = { ...(req.body || {}), type };
-    const payload = PayloadSchema.parse(base);
+    const payload = PayloadSchema.parse({ ...(req.body || {}), type });
 
-    // 1) Pipeline (LLM-Aufruf, Prompts, Flags, etc.)
+    // 1) Pipeline (LLM)
     const result = await runPipeline(payload); // { text, score, criteria, meta, latency_ms }
 
-    // 2) Creator-Style für Policy laden (Best Effort)
+    // 2) Style (Best Effort)
     let rec = null;
     try { rec = await fetchCreatorStyle(payload.creator); }
     catch { rec = { handle: payload.creator, style: {} }; }
 
-    const creatorHandle =
-      payload.creator || rec?.handle || rec?.style?.creator || "lena";
+    const creatorHandle = payload.creator || rec?.handle || rec?.style?.creator || "lena";
     const style = (rec && rec.style) ? rec.style : (rec || {});
 
-    // 3) Policy anwenden (CTA dedupe + striktes Closing)
+    // 3) Policy (CTA/Closing)
     const sanitizedText = applyPolicy(String(result.text || ""), { creatorHandle, style });
 
-    // 4) Antwort mit Policy-Meta
+    // 4) Saubere Response + Policy-Meta
     res.json({
       text: sanitizedText,
       score: result?.score ?? null,
       criteria: result?.criteria ?? [],
       cache: result?.cache ?? undefined,
       meta: {
-        ...(result?.meta || {}),
         type: payload.type,
         creator: creatorHandle,
         policy_version: "v3.6",
@@ -72,6 +69,9 @@ app.post("/api/content/:type", async (req, res) => {
   }
 });
 
+// ===== (Optionale) weitere Routen erst NACH unserer definitiven Route mounten =====
+// … ggf. app.use(otherRouters);
+
 // Globaler Fehler-Handler
 app.use((err, _req, res, _next) => {
   console.error("unhandled:", err);
@@ -80,6 +80,6 @@ app.use((err, _req, res, _next) => {
 
 const port = process.env.PORT || 8787;
 app.listen(port, () => {
-  console.log(`[root-backend] listening on :${port} (own /api/content/:type handler active)`);
+  console.log(`[root-backend] listening on :${port} (definitive /api/content/:type active)`);
 });
 
