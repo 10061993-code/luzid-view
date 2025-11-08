@@ -1,20 +1,13 @@
 // packages/content-engine/lib/promptPolicy.mjs
-// v3.0 — Ultra CTA Filter (Imperative Detection) + Strict Closing
-
-/**
- * Hauptfunktion: Säubert und vereinheitlicht generierte Texte.
- * - entfernt doppelte CTA oder imperativische Sätze
- * - hängt genau eine kanonische CTA an
- * - erzwingt striktes Creator-Closing (xx – Lena etc.)
- */
+// v3.1 — Sentence-level CTA purge (imperatives), single canonical CTA, strict closing
 
 export function applyPolicy(text, { creatorHandle, style }) {
   let t = (text || "").trim();
   t = normalizeWhitespace(t);
   t = stripHallucinatedHeaders(t);
   t = limitEmojis(t, style?.emoji ?? "none");
-  t = dedupeCTA(t, style?.cta_style ?? "crisp");
-  t = enforceClosing(t, creatorHandle, style);
+  t = dedupeCTA(t, style?.cta_style ?? "crisp");   // → exakt 1 CTA, immer kanonisch
+  t = enforceClosing(t, creatorHandle, style);     // → striktes Closing je Creator
   return t;
 }
 
@@ -25,31 +18,39 @@ function normalizeWhitespace(t) {
 }
 
 function stripHallucinatedHeaders(t) {
-  // Entfernt evtl. Markdown-Überschriften vom Modell
   return t.replace(/^(?:#+\s.*\n+)+/g, "");
 }
 
 function limitEmojis(t, mode) {
-  if (mode === "none") {
-    return t.replace(/\p{Extended_Pictographic}/gu, "");
-  }
+  if (mode === "none") return t.replace(/\p{Extended_Pictographic}/gu, "");
   return t;
 }
 
-/* ---------------------- CTA-Erkennung ---------------------- */
+/* ---------------------- CTA-Entfernung (Satz-basiert) ---------------------- */
+// Imperativ-Verben, die wir als CTA werten:
+const CTA_VERBS = /(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b/i;
 
-// Ultra-robust: jede Zeile/Satz mit Imperativ-Verb ist CTA
-const CTA_VERBS =
-  /(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b/i;
+// 1) Entfernt jeden *Satz* (bis . ! ?), der ein Imperativ-Verb enthält
+function removeImperativeSentences(raw) {
+  const SENTENCE = /[^.!?]*[.!?]/g; // grobe Satzgrenzen
+  let out = "";
+  let m;
+  while ((m = SENTENCE.exec(raw)) !== null) {
+    const sentence = m[0].trim();
+    if (!sentence) continue;
+    if (CTA_VERBS.test(sentence)) continue; // CTA-Satz verwerfen
+    out += (out ? "\n" : "") + sentence;
+  }
+  // Rest ohne abschließendes Satzzeichen (falls vorhanden)
+  const tail = raw.slice(SENTENCE.lastIndex).trim();
+  if (tail && !CTA_VERBS.test(tail)) out += (out ? "\n" : "") + tail;
+  return out;
+}
 
-function isCTA(line) {
-  if (!line) return false;
-  const l = line.trim();
-  // Bullets wie "- Schreibe ..." → CTA
-  if (/^\s*-\s*/.test(l) && CTA_VERBS.test(l)) return true;
-  // normale Zeilen mit Imperativ
-  if (CTA_VERBS.test(l)) return true;
-  return false;
+// 2) Entfernt Zeilen mit Bullets + Imperativ
+function removeBulletImperatives(raw) {
+  const BULLET_IMP = /(^|\n)\s*-\s*(?:Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b[^\n]*/gim;
+  return raw.replace(BULLET_IMP, "").replace(/\n{3,}/g, "\n\n");
 }
 
 function canonicalCTA() {
@@ -57,59 +58,50 @@ function canonicalCTA() {
 }
 
 /**
- * Entfernt alle Imperativ- oder CTA-Sätze restlos
- * und fügt am Ende genau eine kanonische CTA hinzu.
+ * Endgültige CTA-Strategie:
+ *  - zuerst satzbasiert ALLE Imperativ-Sätze löschen
+ *  - dann bullet-basierte Imperative löschen
+ *  - Body glätten
+ *  - am Ende genau EINE kanonische CTA anhängen
  */
 function dedupeCTA(text, styleCta) {
-  const canonical = canonicalCTA(styleCta);
+  let body = text;
 
-  // 1️⃣ Text in einzelne Zeilen/Sätze aufbrechen
-  const SENTENCE_BOUNDARY = /([.!?])\s+(?=[A-ZÄÖÜ])/g;
-  const parts = text
-    .replace(/\s+\n/g, "\n")
-    .replace(SENTENCE_BOUNDARY, "$1\n")
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  // global satzweise alle Imperativ-Sätze raus (inkl. Kommas, Nebensätze)
+  body = removeImperativeSentences(body);
 
-  // 2️⃣ Alle CTA-Zeilen (Imperative) entfernen
-  const kept = [];
-  for (const p of parts) {
-    if (isCTA(p)) continue;
-    kept.push(p);
-  }
+  // danach Bullet-Imperative restlos entfernen
+  body = removeBulletImperatives(body);
 
-  // 3️⃣ Body neu zusammensetzen und glätten
-  let body = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  // Absätze glätten
+  body = body.replace(/\n{3,}/g, "\n\n").trim();
 
-  // 4️⃣ Safety-Net: Imperativ-Fragmente ohne Punkt restlos entfernen
+  // Fallback: falls irgendwo Imperativ-Fragmente ohne Satzende verbleiben, hart weg
   const CTA_GLOBAL = new RegExp(
     [
-      /(^|\n)\s*-\s*(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b.*($|\n)/.source,
-      /(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b.*$/.source,
+      // generische Imperativ-Zeile
+      /(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b[^\n.!?]*$/ .source,
+      // bekannte früherer Zeilen
       /Notiere dir heute einen einzigen, leichten Schritt\.?/.source,
       /Setze heute einen kleinen, konkreten Schritt\.?/.source,
     ].join("|"),
     "gim"
   );
-
   body = body.replace(CTA_GLOBAL, "").replace(/\n{3,}/g, "\n\n").trim();
 
-  // 5️⃣ Exakt eine kanonische CTA anhängen
-  body = body.length ? body + "\n\n" + canonical : canonical;
-
+  // exakt EINE kanonische CTA anhängen
+  body = body.length ? body + "\n\n" + canonicalCTA(styleCta) : canonicalCTA(styleCta);
   return body.trim();
 }
 
 /* ---------------------- Closing-Logik ---------------------- */
 
 function enforceClosing(t, creatorHandle, style = {}) {
-  // Entferne evtl. modellgenerierte Grußformeln
+  // modellgenerierte Grußformeln am Ende entfernen
   const signoffRx =
     /(\n\s*(Alles Liebe|Liebe Grüße|Herzlichst|Herzlich|LG|xx|–)\s*[—–-]?\s*[A-Za-zÄÖÜäöüß✨ ]{0,40},?\s*)$/i;
   let body = t.replace(signoffRx, "").trim();
 
-  // Definiere exakte Closings pro Creator
   const strictByHandle = {
     lena: "xx – Lena",
     paul: "– Paul",
