@@ -1,5 +1,5 @@
 // packages/content-engine/lib/promptPolicy.mjs
-// v3.3 — aggressive inline CTA scrub + single canonical CTA + strict closing
+// v3.4 — global inline imperative purge (any position) + single canonical CTA + strict closing
 
 export function applyPolicy(text, { creatorHandle, style }) {
   let t = (text || "").trim();
@@ -27,55 +27,59 @@ function limitEmojis(t, mode) {
 }
 
 /* ---------------------- CTA-Entfernung ---------------------- */
-
 /**
- * Wir werten als CTA jeden Imperativ mit typischen Verben – auch inline mitten im Absatz,
- * mit/ohne "heute", mit/ohne Satzende, als Bullet oder als separater Satz.
+ * Wir entfernen jede Imperativ-Sequenz mit typischen Verben (Schreibe/Notiere/Setze/…)
+ * — unabhängig von Position (Satzanfang, Mitte, Bullet, ohne Punkt, etc.).
+ * Strategie:
+ *  1) Bullet-Zeilen mit Imperativ komplett weg
+ *  2) Inline-Imperativ von Verb bis Satzende (bis ., !, ?, Zeilenende) global entfernen
+ *  3) Restfragmente (ohne Endzeichen) global entfernen
+ *  4) Am Ende genau EINE kanonische CTA anhängen
  */
-const CTA_VERBS = "(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)";
-const CTA_INLINE = new RegExp(
-  // Kante: Satz-/Zeilengrenze oder Anfang → optional Bullet/Whitespace → Imperativverb → bis zum nächsten Satzende oder Zeilenende weg
-  String.raw`(^|[\n\.!\?]\s*)(?:-\s*)?${CTA_VERBS}\b[^\.!\?\n]*[\.!\?]?`,
+
+const CTA_VERBS_GROUP = "(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)";
+
+// Bullet-Zeilen mit Imperativ (ganze Zeile)
+const RX_BULLET = new RegExp(String.raw`(^|\n)\s*-\s*${CTA_VERBS_GROUP}\b[^\n]*`, "gim");
+
+// Inline-Imperativ: Verb irgendwo im Satz → bis zum nächsten Satzende/Zeilenende
+const RX_INLINE_TO_END = new RegExp(
+  String.raw`${CTA_VERBS_GROUP}\b[^\.!\?\n]*[\.!\?]?`,
   "gim"
 );
-const CTA_BULLET_LINE = new RegExp(
-  String.raw`(^|\n)\s*-\s*${CTA_VERBS}\b[^\n]*`,
+
+// Restfragmente ohne Punkt/Zeichen (zur Sicherheit)
+const RX_FRAGMENT = new RegExp(
+  String.raw`(^|\n)\s*(?:-\s*)?${CTA_VERBS_GROUP}\b[^\n]*`,
   "gim"
 );
-
-/**
- * Entfernt ALLE CTAs (inline + bullets + satzweise) kompromisslos
- * und hängt genau EINE kanonische CTA an.
- */
-function dedupeCTA(text, styleCta) {
-  const canonical = canonicalCTA(styleCta);
-
-  let body = text;
-
-  // 1) Zuerst Bullet-CTAs hart entfernen (ganze Zeilen)
-  body = body.replace(CTA_BULLET_LINE, "$1").replace(/\n{3,}/g, "\n\n");
-
-  // 2) Dann *inline* Imperativ-Sequenzen inklusive folgendem Satzende entfernen
-  body = body.replace(CTA_INLINE, "$1").replace(/\n{3,}/g, "\n\n");
-
-  // 3) Rest glätten
-  body = body.replace(/\s+$/g, "").replace(/\n{3,}/g, "\n\n").trim();
-
-  // 4) Sicherheitsnetz: falls doch noch Imperativfragmente ohne Punkt stehen
-  const CTA_FRAGMENTS = new RegExp(
-    String.raw`(^|\n)\s*(?:-\s*)?${CTA_VERBS}\b[^\n]*`,
-    "gim"
-  );
-  body = body.replace(CTA_FRAGMENTS, "$1").replace(/\n{3,}/g, "\n\n").trim();
-
-  // 5) Exakt EINE kanonische CTA anhängen
-  body = body.length ? `${body}\n\n${canonical}` : canonical;
-
-  return body.trim();
-}
 
 function canonicalCTA() {
   return "Notiere dir heute einen einzigen, leichten Schritt.";
+}
+
+function dedupeCTA(text, styleCta) {
+  let body = text;
+
+  // 1) Bullets hart entfernen
+  body = body.replace(RX_BULLET, "$1").replace(/\n{3,}/g, "\n\n");
+
+  // 2) Inline-Imperative überall entfernen (auch mitten im Satz)
+  body = body.replace(RX_INLINE_TO_END, "").replace(/\n{3,}/g, "\n\n");
+
+  // 3) Restfragmente ohne Endzeichen weg
+  body = body.replace(RX_FRAGMENT, "$1").replace(/\n{3,}/g, "\n\n");
+
+  // Aufräumen: doppelte Leerzeichen + Lücken vor Satzzeichen säubern
+  body = body
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\s+([,.!?:;])/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  // 4) Exakt EINE kanonische CTA anhängen
+  body = body.length ? `${body}\n\n${canonicalCTA(styleCta)}` : canonicalCTA(styleCta);
+  return body.trim();
 }
 
 /* ---------------------- Closing-Logik ---------------------- */
