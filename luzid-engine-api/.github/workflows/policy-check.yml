@@ -21,22 +21,16 @@ jobs:
           node-version: 20
           cache: npm
 
-      # Install nur im Content-Engine-Package (schneller, sauberer)
       - name: Install (content-engine)
         working-directory: ./packages/content-engine
         run: |
           npm ci
-
-      # (Optional) Root-Install, falls andere Skripte/Types benötigt werden
-      # - name: Install (root)
-      #   run: npm ci
 
       - name: Run snapshot guard (CTA/Closing Policy)
         working-directory: ./packages/content-engine
         run: |
           npm run snapshot
 
-      # Artefakt sichern, wenn der Guard fehlschlägt (Debug erleichtern)
       - name: Upload snapshot failures (if any)
         if: always()
         uses: actions/upload-artifact@v4
