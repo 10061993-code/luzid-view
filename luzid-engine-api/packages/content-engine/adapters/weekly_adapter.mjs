@@ -15,6 +15,7 @@ export async function buildWeeklyContext(input) {
   const remote = await getCreatorStyleFromDB(creator).catch(() => null);
   const base   = getCreatorStyle(creator);
   const style  = { ...base, ...(remote || {}) };
+  console.log("[creator-style]", {creator, hasRemote: !!remote});
 
   const atoms = pickWeeklyAtoms({ event });
 
