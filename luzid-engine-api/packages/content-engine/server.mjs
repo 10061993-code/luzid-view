@@ -1,19 +1,27 @@
+// packages/content-engine/server.mjs
 import express from "express";
-import { router as generateDrop } from "./routes/generate_drop.mjs";
-import { router as metricsRouter } from "./routes/metrics.mjs";
-import { router as previewRouter } from "./routes/preview.mjs";
+import cors from "cors";
+import { router as contentRouter } from "./routes/content.mjs";
 
 const app = express();
 
-app.get("/healthz", (req, res) => {
-  res.json({ ok: true, env: "backend", port: String(process.env.PORT || 8787) });
+app.use(cors());
+app.use(express.json({ limit: "1mb" }));
+
+// Health
+app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
+
+// Content routes (weekly|micro)
+app.use(contentRouter);
+
+// Fallback
+app.use((err, _req, res, _next) => {
+  console.error("unhandled:", err);
+  res.status(500).json({ error: "internal_error" });
 });
 
-app.use("/api", generateDrop);
-app.use("/api", previewRouter);
-app.use("/api", metricsRouter);
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`[content-engine] listening on :${port}`);
+});
 
-app.use((req, res) => res.status(404).json({ error: "Not Found", path: req.path }));
-
-const PORT = process.env.PORT || 8787;
-app.listen(PORT, () => console.log(`server listening on :${PORT}`));
