@@ -1,18 +1,38 @@
+// luzid-engine-api/server.mjs
+// Hotfix: mount content-engine routes (with policy) into the existing backend server
+
 import express from "express";
-import { router as generateDrop } from "./packages/content-engine/routes/generate_drop.mjs";
+import cors from "cors";
+
+// ⬇️ Content-Engine Router (mit Edge-Policy & /whoami)
+import { router as contentRouter } from "./packages/content-engine/routes/content.mjs";
+import { router as healthRouter } from "./packages/content-engine/routes/health.mjs";
 
 const app = express();
 
-// Health
-app.get("/healthz", (req, res) => {
-  res.json({ ok: true, ts: Date.now() });
+app.use(cors());
+app.use(express.json({ limit: "1mb" }));
+
+// Bestehender Health-Endpunkt (beibehalten, falls andere Tools darauf prüfen)
+app.get("/healthz", (_req, res) => {
+  // Lass die alte Signatur stehen, damit Monitoring nicht bricht:
+  res.json({ ok: true, env: "backend", port: process.env.PORT ?? "8787" });
 });
 
-// API
-app.use("/api", generateDrop);
+// Diagnose-Endpunkte der Content-Engine
+app.use(healthRouter); // /whoami + alternative /healthz (liefert service:"content-engine")
 
-// 404
-app.use((req, res) => res.status(404).json({ error: "Not Found" }));
+// Content-Engine API (Weekly/Micro) mit Policy am HTTP-Rand
+app.use(contentRouter);
 
-const PORT = process.env.PORT || 8787;
-app.listen(PORT, () => console.log(`server listening on :${PORT}`));
+// Fallback/Fehler
+app.use((err, _req, res, _next) => {
+  console.error("unhandled:", err);
+  res.status(500).json({ error: "internal_error", detail: String(err?.message || err) });
+});
+
+const port = process.env.PORT || 8787;
+app.listen(port, () => {
+  console.log(`[root-backend] listening on :${port} (mounts content-engine routes)`);
+});
+
