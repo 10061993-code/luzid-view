@@ -1,21 +1,17 @@
-# ---- Base image ----
-FROM node:20-alpine AS base
+kFROM node:20-alpine AS base
 WORKDIR /app
 
-# ---- Install only package manifests first (better cache) ----
+# nur Manifeste zuerst (Cache)
 COPY package.json package-lock.json ./
 COPY packages/content-engine/package.json packages/content-engine/package.json
-
 RUN npm ci --omit=dev
 
-# ---- Copy source ----
+# Code
 COPY . .
 
-# ---- Environment ----
 ENV NODE_ENV=production
 ENV PORT=3000
-
-# ---- Start ----
 EXPOSE 3000
+
 CMD ["node", "packages/content-engine/server.mjs"]
 
