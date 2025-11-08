@@ -18,7 +18,7 @@ export async function runPipeline(input={}, meta={}) {
 
   if (isWeekly) {
     policy = applyPolicy({ ...input, length: input.length||"medium" });
-    const ctx = buildWeeklyContext(input);         // creator style + atoms + transits
+    const ctx = await buildWeeklyContext(input);         // creator style + atoms + transits
     system = buildSystem({ tone: policy.system.includes("Tonalität:") ? "" : "freundlich, klar", register: ctx.style.register });
     user   = buildUser({
       greeting: ctx.style.greeting,
