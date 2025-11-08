@@ -1,12 +1,12 @@
 // packages/content-engine/scripts/snapshot_runner.mjs
-// Guard: validates CTA/Closing policy on live endpoint for multiple creators
+// Guard v2: prüft CTA/Closing-Policy korrekt (kanonische CTA wird VOR der Imperativ-Prüfung entfernt)
 
 const ENDPOINT = "https://luzid-astro-backend-production.up.railway.app/api/content/weekly";
 const CREATORS = ["lena", "paul", "yasmin"];
 const BASE = { week: "2026-W05", event: "full_moon", length: "medium", age: 24 };
 
 const CTA_CANON = "Notiere dir heute einen einzigen, leichten Schritt.";
-const IMP_VERBS = /(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b/;
+const IMP_VERBS = /(Schreibe|Notiere|Setze|Formuliere|Definiere|Wähle|Plane|Mache)\b/i;
 const CLOSINGS = {
   lena: /xx – Lena$/,
   paul: /– Paul$/,
@@ -42,18 +42,19 @@ function assert(cond, msg) {
       const text = await callWeekly(c);
       const { body, closing } = splitClosing(text);
 
-      // Closing korrekt?
+      // 1) Closing korrekt?
       assert(CLOSINGS[c].test(closing), `[${c}] wrong closing: "${closing}"`);
 
-      // Body darf keine Imperativ-Verben enthalten
-      assert(!IMP_VERBS.test(body), `[${c}] body contains imperative verb`);
-
-      // Body muss mit der kanonischen CTA enden
+      // 2) Body muss mit der kanonischen CTA enden
       assert(body.endsWith(CTA_CANON), `[${c}] canonical CTA missing or not at end`);
 
-      // keine doppelte kanonische CTA
+      // 3) Imperativ-Prüfung auf den Body OHNE die kanonische CTA
+      const bodyWithoutCTA = body.slice(0, body.length - CTA_CANON.length).trim();
+      assert(!IMP_VERBS.test(bodyWithoutCTA), `[${c}] body contains imperative verb (outside canonical CTA)`);
+
+      // 4) Keine doppelte kanonische CTA
       const ctaCount = (body.match(new RegExp(CTA_CANON.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) || []).length;
-      assert(ctaCount === 1, `[${c}] duplicate canonical CTA: ${ctaCount}`);
+      assert(ctaCount === 1, `[${c}] duplicate canonical CTA (${ctaCount})`);
 
       console.log(`[OK] ${c}`);
     } catch (e) {
